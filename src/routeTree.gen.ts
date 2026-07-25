@@ -12,6 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupUserRouteImport } from './routes/signup-user'
 import { Route as SignupBusinessRouteImport } from './routes/signup-business'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as BusinessRouteImport } from './routes/business'
 import { Route as IndexRouteImport } from './routes/index'
 
 const SignupUserRoute = SignupUserRouteImport.update({
@@ -29,6 +31,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardRoute = DashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BusinessRoute = BusinessRouteImport.update({
+  id: '/business',
+  path: '/business',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -37,12 +49,16 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/business': typeof BusinessRoute
+  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/business': typeof BusinessRoute
+  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
@@ -50,20 +66,43 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/business': typeof BusinessRoute
+  '/dashboard': typeof DashboardRoute
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/signup-business' | '/signup-user'
+  fullPaths:
+    | '/'
+    | '/business'
+    | '/dashboard'
+    | '/login'
+    | '/signup-business'
+    | '/signup-user'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/signup-business' | '/signup-user'
-  id: '__root__' | '/' | '/login' | '/signup-business' | '/signup-user'
+  to:
+    | '/'
+    | '/business'
+    | '/dashboard'
+    | '/login'
+    | '/signup-business'
+    | '/signup-user'
+  id:
+    | '__root__'
+    | '/'
+    | '/business'
+    | '/dashboard'
+    | '/login'
+    | '/signup-business'
+    | '/signup-user'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  BusinessRoute: typeof BusinessRoute
+  DashboardRoute: typeof DashboardRoute
   LoginRoute: typeof LoginRoute
   SignupBusinessRoute: typeof SignupBusinessRoute
   SignupUserRoute: typeof SignupUserRoute
@@ -92,6 +131,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard': {
+      id: '/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/business': {
+      id: '/business'
+      path: '/business'
+      fullPath: '/business'
+      preLoaderRoute: typeof BusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -104,6 +157,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  BusinessRoute: BusinessRoute,
+  DashboardRoute: DashboardRoute,
   LoginRoute: LoginRoute,
   SignupBusinessRoute: SignupBusinessRoute,
   SignupUserRoute: SignupUserRoute,

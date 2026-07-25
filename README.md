@@ -1,29 +1,65 @@
-# Welcome to your Lovable project
+# Daily WhatsApp Challenge
 
-This project was built with [Lovable](https://lovable.dev).
+Premium black + green platform where users complete WhatsApp status tasks and get paid, and businesses run status ad campaigns.
 
-## Build with Lovable
+## Pages
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
+- `/` — Homepage (hero, 2 categories, carousel)
+- `/login` — Unified login (users, business, super admin)
+- `/signup-user` — Multi-step user signup (terms → about → generated username/password)
+- `/signup-business` — Business signup
+- `/dashboard` — User dashboard (wallet, tasks, withdrawals, referrals)
+- `/business` — Business dashboard (package, campaigns)
+- `/admin` — Super Admin control panel (users, tasks, submissions, businesses, campaigns, withdrawals, settings)
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
+## Super admin
 
-## Development
+- Username: `shahasad5656`
+- Password: `shahasad@challenge`
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Hardcoded in `src/lib/session.ts`.
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+## Backend (Supabase via GitHub sync)
+
+This project uses Supabase's GitHub integration. Push to your linked GitHub repo and Supabase will automatically run migrations under `supabase/migrations/` on your project.
+
+### 1. Set env vars
+
+Create `.env` in the project root:
+
+```
+VITE_SUPABASE_URL=https://YOUR_PROJECT.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=YOUR_ANON_KEY
 ```
 
-## Built with
+Get these from **Supabase → Project Settings → API**.
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+For Vercel/Netlify/etc, add the same env vars to your deployment platform.
+
+### 2. Push to GitHub
+
+`supabase/migrations/20260101000000_init.sql` is auto-applied by Supabase on push. It creates:
+
+`app_users`, `businesses`, `tasks`, `task_assignments`, `campaigns`, `withdrawals`, `wallet_history`, `settings`.
+
+Auth model: **plaintext credentials, no Supabase Auth** (as requested — harden later before production). Data API `anon` role has full CRUD; RLS is not enabled.
+
+### 3. First-run admin setup
+
+Log in as super admin → **Settings** tab and configure:
+
+- UPI ID (for QR codes)
+- Terms Google Docs URL, About Google Docs URL, Rejection terms URL
+- 2 carousel image Google Drive links
+- Business package details
+- Referral % · Max free tasks per user
+
+Then add tasks in the **Tasks** tab.
+
+## Image handling
+
+All images (task creatives, proof screenshots, ad creatives, carousel) accept **Google Drive share URLs** (`https://drive.google.com/file/d/…/view`). The client auto-converts to direct-view URLs. Users are instructed to set "Anyone with the link".
+
+## Publishing
+
+Since this uses no Lovable Cloud, sync to GitHub and deploy the frontend to Vercel/Netlify (TanStack Start). Configure the two `VITE_*` env vars on the platform. Supabase applies migrations automatically on the same push.
