@@ -9,8 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupUserRouteImport } from './routes/signup-user'
+import { Route as SignupBusinessRouteImport } from './routes/signup-business'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 
+const SignupUserRoute = SignupUserRouteImport.update({
+  id: '/signup-user',
+  path: '/signup-user',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SignupBusinessRoute = SignupBusinessRouteImport.update({
+  id: '/signup-business',
+  path: '/signup-business',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +37,61 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/signup-business': typeof SignupBusinessRoute
+  '/signup-user': typeof SignupUserRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/signup-business': typeof SignupBusinessRoute
+  '/signup-user': typeof SignupUserRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/signup-business': typeof SignupBusinessRoute
+  '/signup-user': typeof SignupUserRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/login' | '/signup-business' | '/signup-user'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/login' | '/signup-business' | '/signup-user'
+  id: '__root__' | '/' | '/login' | '/signup-business' | '/signup-user'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
+  SignupBusinessRoute: typeof SignupBusinessRoute
+  SignupUserRoute: typeof SignupUserRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup-user': {
+      id: '/signup-user'
+      path: '/signup-user'
+      fullPath: '/signup-user'
+      preLoaderRoute: typeof SignupUserRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/signup-business': {
+      id: '/signup-business'
+      path: '/signup-business'
+      fullPath: '/signup-business'
+      preLoaderRoute: typeof SignupBusinessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,6 +104,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
+  SignupBusinessRoute: SignupBusinessRoute,
+  SignupUserRoute: SignupUserRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
