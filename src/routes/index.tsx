@@ -64,20 +64,6 @@ function Home() {
           </div>
         </div>
 
-        {/* Stat row */}
-        <div className="mx-auto mt-16 grid max-w-4xl grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { k: "₹1.2Cr+", v: "Paid out" },
-            { k: "40k+", v: "Active earners" },
-            { k: "6M+", v: "Verified views" },
-            { k: "24h", v: "Fast payouts" },
-          ].map((s) => (
-            <div key={s.v} className="glass rounded-2xl px-4 py-5 text-center">
-              <div className="font-display text-2xl font-bold text-gradient-emerald">{s.k}</div>
-              <div className="mt-1 text-xs text-muted-foreground">{s.v}</div>
-            </div>
-          ))}
-        </div>
       </section>
 
       {/* HOW IT WORKS */}
