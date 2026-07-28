@@ -47,7 +47,7 @@ function Dashboard() {
 
   if (!me) return <div className="min-h-screen"><SiteHeader /><div className="p-10 text-center text-muted-foreground">Loading…</div></div>;
 
-  const freeAssignedToday = mine.filter((a) => (a.status === "assigned" || a.status === "submitted") && tasks.find((t) => t.id === a.task_id)?.type === "free").length;
+  const freeAssignedToday = mine.filter((a) => a.status !== "rejected" && tasks.find((t) => t.id === a.task_id)?.type === "free").length;
 
   return (
     <div className="min-h-screen">

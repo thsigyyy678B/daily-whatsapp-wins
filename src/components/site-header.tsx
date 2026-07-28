@@ -6,12 +6,11 @@ export function SiteHeader() {
   const [session, setS] = useState<ReturnType<typeof getSession>>(null);
   useEffect(() => { setS(getSession()); }, []);
 
-  const dashHref = (
+  const dashHref =
     session?.role === "admin" ? "/admin"
     : session?.role === "business" ? "/business"
     : session?.role === "user" ? "/dashboard"
-    : "/login"
-  ) as "/admin" | "/business" | "/dashboard" | "/login";
+    : "/login";
 
   return (
     <header className="sticky top-0 z-40 w-full">
