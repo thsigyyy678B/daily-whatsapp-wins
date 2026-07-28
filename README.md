@@ -62,4 +62,4 @@ All images (task creatives, proof screenshots, ad creatives, carousel) accept **
 
 ## Publishing
 
-Since this uses no Lovable Cloud, sync to GitHub and deploy the frontend to Vercel/Netlify (TanStack Start). Configure the two `VITE_*` env vars on the platform. Supabase applies migrations automatically on the same push.
+Sync to GitHub and deploy the frontend to Vercel/Netlify. Configure the two `VITE_*` env vars on the platform. Supabase applies migrations automatically on the same push.
