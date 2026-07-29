@@ -23,6 +23,6 @@ export default defineConfig({
         server: { entry: "server" },
       },
   // Static output only for the Pages build; Lovable/preview builds keep their default target.
-  ...(isGitHubPages ? { nitro: { preset: "static" as const } } : {}),
+  ...(isGitHubPages ? { nitro: false as const } : {}),
   vite: isGitHubPages ? { base: basePath } : {},
 });
