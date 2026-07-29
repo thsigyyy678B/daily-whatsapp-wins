@@ -63,3 +63,29 @@ All images (task creatives, proof screenshots, ad creatives, carousel) accept **
 ## Publishing
 
 Sync to GitHub and deploy the frontend to Vercel/Netlify. Configure the two `VITE_*` env vars on the platform. Supabase applies migrations automatically on the same push.
+
+## GitHub Pages deployment
+
+The workflow at `.github/workflows/deploy.yml` builds a static SPA and publishes it to GitHub Pages on every push to `main`.
+
+One-time setup in the repo:
+
+1. **Settings → Pages → Build and deployment → Source: GitHub Actions**
+2. **Settings → Secrets and variables → Actions** — add:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+No keys are hardcoded; the build reads them from those secrets.
+
+Details:
+
+- Base path is set automatically to `/<repo-name>/` via `VITE_BASE_PATH`; Vite `base` and the router `basepath` both use it, so all assets and links resolve under the sub-path.
+- `GITHUB_PAGES=true` switches the build to SPA mode (no server runtime) and outputs to `dist/client`.
+- SPA refresh works because the shell is copied to both `index.html` and `404.html`; `.nojekyll` keeps asset folders intact.
+- Supabase is untouched — the app still talks to it directly from the browser with the publishable key.
+
+Build locally the same way:
+
+```
+GITHUB_PAGES=true VITE_BASE_PATH=/<repo-name>/ bun run build
+```
