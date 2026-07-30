@@ -65,8 +65,14 @@ function SignupUser() {
   async function createAccount() {
     setBusy(true);
     try {
+      if ((await countRows("app_users")) >= MAX_USERS) {
+        setFull(true);
+        toast.error(CLOSED_MESSAGE);
+        return;
+      }
       const u = randomCode(4, true);
       const p = randomCode(4, true);
+
       let referred_by: string | null = null;
       if (ref.trim()) {
         const { data } = await supabase.from("app_users").select("username").eq("referral_code", ref.trim().toUpperCase()).maybeSingle();
