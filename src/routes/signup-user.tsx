@@ -6,6 +6,8 @@ import { randomCode, setSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Check, Copy, FileText, KeyRound, PartyPopper, ShieldCheck, UserRound } from "lucide-react";
 import { PageShell, Field, inputCls, Spinner } from "@/components/ui-kit";
+import { CLOSED_MESSAGE, MAX_USERS, countRows } from "@/lib/limits";
+
 
 export const Route = createFileRoute("/signup-user")({
   head: () => ({
