@@ -175,7 +175,166 @@ function Home() {
         </Container>
       </section>
 
+      {/* TASK TIERS */}
+      <section>
+        <Container className="pb-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="eyebrow justify-center">Task tiers</div>
+            <h2 className="mt-3 font-display text-3xl font-bold sm:text-4xl">Free tasks and sponsored tasks</h2>
+            <p className="mx-auto mt-3 max-w-lg text-sm text-muted-foreground sm:text-base">
+              Two ways to earn from the same WhatsApp status.
+            </p>
+          </div>
+          <div className="mt-12 grid gap-5 lg:grid-cols-2">
+            <Card className="p-8">
+              <div className="icon-tile"><Coins className="h-5 w-5" /></div>
+              <h3 className="mt-6 font-display text-2xl font-semibold">Free tasks</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Open to every verified earner. Pick a brand task, post the supplied creative and submit your view proof.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm">
+                {["No unlock payment required", "A limited number of free tasks stay live at a time", "Payout fixed per task in ₹"].map((li) => (
+                  <li key={li} className="flex items-start gap-2.5 text-muted-foreground">
+                    <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> {li}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+            <Card className="p-8">
+              <div className="icon-tile"><Sparkles className="h-5 w-5" /></div>
+              <h3 className="mt-6 font-display text-2xl font-semibold">Sponsored tasks</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Premium brand campaigns with higher payouts. Unlock the slot with a one-time UPI payment, then earn the full task payout.
+              </p>
+              <ul className="mt-6 space-y-3 text-sm">
+                {["Scan the generated UPI QR to unlock", "Submit the transaction ID for verification", "Higher payout per verified view target"].map((li) => (
+                  <li key={li} className="flex items-start gap-2.5 text-muted-foreground">
+                    <Target className="mt-0.5 h-4 w-4 shrink-0 text-primary" /> {li}
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </div>
+        </Container>
+      </section>
+
+      {/* TASK TIMELINE */}
+      <section>
+        <Container className="pb-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="eyebrow justify-center">The 24-hour window</div>
+            <h2 className="mt-3 font-display text-3xl font-bold sm:text-4xl">Every task runs on one clock</h2>
+          </div>
+          <div className="mt-12 grid gap-5 md:grid-cols-4">
+            {[
+              { t: "Hour 0", h: "Assign the task", d: "Confirm the WhatsApp number the status will be posted from." },
+              { t: "Hour 0", h: "Download creative", d: "Grab the brand image straight from the task card." },
+              { t: "Hours 0–18", h: "Keep it live", d: "The status stays on your profile so views accumulate." },
+              { t: "Hours 18–24", h: "Upload proof", d: "Submit your screenshot link and final view count before the window closes." },
+            ].map((s, i) => (
+              <Card key={s.h} className="relative overflow-hidden p-6">
+                <span className="absolute right-4 top-3 font-display text-5xl font-bold text-white/[0.04]">{i + 1}</span>
+                <div className="eyebrow">{s.t}</div>
+                <h3 className="mt-4 font-display text-lg font-semibold">{s.h}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.d}</p>
+              </Card>
+            ))}
+          </div>
+        </Container>
+      </section>
+
+      {/* PAYOUTS + REFERRALS */}
+      <section>
+        <Container className="pb-24">
+          <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
+            <Card className="p-8 sm:p-10">
+              <div className="eyebrow"><Wallet className="h-3.5 w-3.5" /> Withdrawals</div>
+              <h3 className="mt-4 font-display text-3xl font-bold">Three ways to take your money out</h3>
+              <div className="mt-8 grid gap-4 sm:grid-cols-3">
+                {[
+                  { i: Coins, t: "Bank transfer", d: "Account number and IFSC code." },
+                  { i: Wallet, t: "UPI", d: "Straight to your UPI ID." },
+                  { i: Gift, t: "2× coupon", d: "Double your balance in coupon value." },
+                ].map((o) => (
+                  <div key={o.t} className="rounded-2xl border border-border bg-white/[0.02] p-5">
+                    <div className="icon-tile"><o.i className="h-4 w-4" /></div>
+                    <div className="mt-4 font-display font-semibold">{o.t}</div>
+                    <p className="mt-1.5 text-sm text-muted-foreground">{o.d}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-6 text-sm text-muted-foreground">
+                Requested amounts are held as “awaiting withdrawal” in your wallet history until the admin marks the payout as done.
+              </p>
+            </Card>
+            <Card className="relative overflow-hidden p-8 sm:p-10">
+              <div className="absolute -right-16 -bottom-16 h-56 w-56 rounded-full bg-primary/12 blur-3xl" aria-hidden />
+              <div className="relative">
+                <div className="eyebrow"><Gift className="h-3.5 w-3.5" /> Referrals</div>
+                <h3 className="mt-4 font-display text-3xl font-bold">Invite once, earn on their first task</h3>
+                <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+                  Generate your 5-character referral code from the dashboard. When someone signs up with it and completes their first task,
+                  a share of that payout is credited to your wallet automatically.
+                </p>
+                <Link to="/signup-user" className="btn-ghost-emerald mt-8">
+                  Get my code <ArrowUpRight className="h-4 w-4" />
+                </Link>
+              </div>
+            </Card>
+          </div>
+        </Container>
+      </section>
+
+      {/* BUSINESS FLOW */}
+      <section>
+        <Container className="pb-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="eyebrow justify-center"><Megaphone className="h-3.5 w-3.5" /> For advertisers</div>
+            <h2 className="mt-3 font-display text-3xl font-bold sm:text-4xl">Launch a campaign in four steps</h2>
+          </div>
+          <div className="mt-12 grid gap-5 md:grid-cols-4">
+            {[
+              { i: ShieldCheck, t: "Register", d: "Business name, category, team size and target audience." },
+              { i: Eye, t: "Review the package", d: "Price, expected reach and campaign duration, published by the admin." },
+              { i: Rocket, t: "Submit creative", d: "Share your image link and accept the campaign conditions." },
+              { i: BadgeCheck, t: "Pay and go live", d: "Pay via the UPI QR, enter the transaction ID and wait for approval." },
+            ].map((s, i) => (
+              <Card key={s.t} className="relative overflow-hidden p-6">
+                <span className="absolute right-4 top-3 font-display text-5xl font-bold text-white/[0.04]">{i + 1}</span>
+                <div className="icon-tile"><s.i className="h-5 w-5" /></div>
+                <h3 className="mt-5 font-display text-lg font-semibold">{s.t}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{s.d}</p>
+              </Card>
+            ))}
+          </div>
+        </Container>
+      </section>
+
+      {/* FAQ */}
+      <section>
+        <Container className="pb-24">
+          <div className="mx-auto max-w-2xl text-center">
+            <div className="eyebrow justify-center">Questions</div>
+            <h2 className="mt-3 font-display text-3xl font-bold sm:text-4xl">Good to know</h2>
+          </div>
+          <div className="mx-auto mt-10 grid max-w-4xl gap-4 md:grid-cols-2">
+            {[
+              { q: "How do I prove my views?", a: "Upload a public image link of your status view screenshot along with the final view count, inside the 18–24 hour window." },
+              { q: "When does the money arrive?", a: "As soon as an admin approves your submission, the task payout is credited to your wallet balance." },
+              { q: "What if my task is rejected?", a: "You'll see the reason: target views not reached, a request to get in touch, or an unlock payment that was not received." },
+              { q: "Do I need any documents?", a: "No. You sign up with your name and WhatsApp number and receive a 4-digit username and password to log in with." },
+            ].map((f) => (
+              <Card key={f.q} className="p-6">
+                <h3 className="font-display text-lg font-semibold">{f.q}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{f.a}</p>
+              </Card>
+            ))}
+          </div>
+        </Container>
+      </section>
+
       {/* CAROUSEL */}
+
       {images.length > 0 && (
         <section>
           <Container className="pb-24">
