@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { getSession, clearSession } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { LayoutDashboard, LogIn, LogOut, Menu, Sparkles, X } from "lucide-react";
@@ -8,6 +8,14 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const path = useRouterState({ select: (r) => r.location.pathname });
+  const nav = useNavigate();
+
+  const logout = () => {
+    clearSession();
+    setS(null);
+    setOpen(false);
+    nav({ to: "/" });
+  };
 
   useEffect(() => { setS(getSession()); }, []);
   useEffect(() => { setOpen(false); }, [path]);
@@ -54,7 +62,7 @@ export function SiteHeader() {
                   <LayoutDashboard className="h-4 w-4" /> Dashboard
                 </Link>
                 <button
-                  onClick={() => { clearSession(); window.location.href = "/"; }}
+                  onClick={logout}
                   className="btn-soft"
                 >
                   <LogOut className="h-4 w-4" /> Logout
@@ -84,7 +92,7 @@ export function SiteHeader() {
               {session ? (
                 <>
                   <Link to={dashHref} className="btn-soft w-full"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link>
-                  <button onClick={() => { clearSession(); window.location.href = "/"; }} className="btn-soft w-full">
+                  <button onClick={logout} className="btn-soft w-full">
                     <LogOut className="h-4 w-4" /> Logout
                   </button>
                 </>
