@@ -6,6 +6,8 @@ import { randomCode, setSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Check, Copy, FileText, KeyRound, PartyPopper, ShieldCheck, UserRound } from "lucide-react";
 import { PageShell, Field, inputCls, Spinner } from "@/components/ui-kit";
+import { CLOSED_MESSAGE, MAX_USERS, countRows } from "@/lib/limits";
+
 
 export const Route = createFileRoute("/signup-user")({
   head: () => ({
@@ -47,6 +49,8 @@ function SignupUser() {
   const [creds, setCreds] = useState<{ u: string; p: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [full, setFull] = useState(false);
+
   useEffect(() => {
     supabase.from("settings").select("key,value").in("key", ["terms_url", "about_url"]).then(({ data }) => {
       data?.forEach((r) => {
@@ -54,13 +58,21 @@ function SignupUser() {
         if (r.key === "about_url") setAboutUrl(String(r.value ?? ""));
       });
     });
+    countRows("app_users").then((c) => setFull(c >= MAX_USERS));
   }, []);
+
 
   async function createAccount() {
     setBusy(true);
     try {
+      if ((await countRows("app_users")) >= MAX_USERS) {
+        setFull(true);
+        toast.error(CLOSED_MESSAGE);
+        return;
+      }
       const u = randomCode(4, true);
       const p = randomCode(4, true);
+
       let referred_by: string | null = null;
       if (ref.trim()) {
         const { data } = await supabase.from("app_users").select("username").eq("referral_code", ref.trim().toUpperCase()).maybeSingle();
@@ -90,6 +102,12 @@ function SignupUser() {
               <div className="eyebrow">Step 01</div>
               <h1 className="mt-3 font-display text-3xl font-bold">Tell us about you</h1>
               <p className="mt-2 text-sm text-muted-foreground">Basic details so we can route your payouts correctly.</p>
+              {full && (
+                <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{CLOSED_MESSAGE}</span>
+                </div>
+              )}
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
                 <Field label="Full name" className="sm:col-span-2">
                   <input className={inputCls} placeholder="Your legal name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -102,10 +120,11 @@ function SignupUser() {
                 </Field>
               </div>
               <div className="mt-9 flex justify-end">
-                <button className="btn-premium px-7 py-3" disabled={!name || !phone} onClick={() => setStep(2)}>Continue</button>
+                <button className="btn-premium px-7 py-3" disabled={!name || !phone || full} onClick={() => setStep(2)}>Continue</button>
               </div>
             </>
           )}
+
 
           {step === 2 && (
             <DocStep

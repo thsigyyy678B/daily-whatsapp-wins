@@ -6,6 +6,8 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { Plus, Trash2 } from "lucide-react";
+import { MAX_BUSINESSES, MAX_USERS, countRows } from "@/lib/limits";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Super Admin — Daily WhatsApp Challenge" }, { name: "description", content: "Platform control panel." }] }),
@@ -30,7 +32,9 @@ function Admin() {
         <div className="glass rounded-3xl p-6">
           <div className="text-xs uppercase tracking-widest text-primary">Super admin</div>
           <h1 className="mt-2 font-display text-3xl font-bold">Control panel</h1>
+          <CapacityBar />
         </div>
+
 
         <div className="glass mt-6 flex flex-wrap gap-2 rounded-full p-2">
           {TABS.map((t) => (
@@ -48,6 +52,41 @@ function Admin() {
           {tab === "Settings" && <SettingsTab />}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CapacityBar() {
+  const [c, setC] = useState({ users: 0, biz: 0 });
+  useEffect(() => {
+    Promise.all([countRows("app_users"), countRows("businesses")]).then(([users, biz]) => setC({ users, biz }));
+  }, []);
+  const items = [
+    { label: "Earner signups", used: c.users, max: MAX_USERS },
+    { label: "Business signups", used: c.biz, max: MAX_BUSINESSES },
+  ];
+  return (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      {items.map((it) => {
+        const pct = Math.min(100, Math.round((it.used / it.max) * 100));
+        const done = it.used >= it.max;
+        return (
+          <div key={it.label} className="rounded-2xl border border-border bg-black/30 p-4">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{it.label}</span>
+              <span className={`font-display text-lg font-bold ${done ? "text-destructive-foreground" : "text-primary"}`}>
+                {it.used}/{it.max}
+              </span>
+            </div>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div className={`h-full rounded-full transition-all ${done ? "bg-destructive" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {done ? "Limit reached — signups closed" : `${it.max - it.used} seats remaining`}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
