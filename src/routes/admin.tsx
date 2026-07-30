@@ -6,6 +6,8 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { Plus, Trash2 } from "lucide-react";
+import { MAX_BUSINESSES, MAX_USERS, countRows } from "@/lib/limits";
+
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Super Admin — Daily WhatsApp Challenge" }, { name: "description", content: "Platform control panel." }] }),
