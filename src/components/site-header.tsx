@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { getSession, clearSession } from "@/lib/session";
 import { useEffect, useState } from "react";
 import { LayoutDashboard, LogIn, LogOut, Menu, Sparkles, X } from "lucide-react";
@@ -8,6 +8,14 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const path = useRouterState({ select: (r) => r.location.pathname });
+  const nav = useNavigate();
+
+  const logout = () => {
+    clearSession();
+    setS(null);
+    setOpen(false);
+    nav({ to: "/" });
+  };
 
   useEffect(() => { setS(getSession()); }, []);
   useEffect(() => { setOpen(false); }, [path]);
