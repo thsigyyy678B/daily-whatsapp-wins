@@ -54,6 +54,41 @@ function Admin() {
   );
 }
 
+function CapacityBar() {
+  const [c, setC] = useState({ users: 0, biz: 0 });
+  useEffect(() => {
+    Promise.all([countRows("app_users"), countRows("businesses")]).then(([users, biz]) => setC({ users, biz }));
+  }, []);
+  const items = [
+    { label: "Earner signups", used: c.users, max: MAX_USERS },
+    { label: "Business signups", used: c.biz, max: MAX_BUSINESSES },
+  ];
+  return (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      {items.map((it) => {
+        const pct = Math.min(100, Math.round((it.used / it.max) * 100));
+        const done = it.used >= it.max;
+        return (
+          <div key={it.label} className="rounded-2xl border border-border bg-black/30 p-4">
+            <div className="flex items-baseline justify-between">
+              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{it.label}</span>
+              <span className={`font-display text-lg font-bold ${done ? "text-destructive-foreground" : "text-primary"}`}>
+                {it.used}/{it.max}
+              </span>
+            </div>
+            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+              <div className={`h-full rounded-full transition-all ${done ? "bg-destructive" : "bg-primary"}`} style={{ width: `${pct}%` }} />
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">
+              {done ? "Limit reached — signups closed" : `${it.max - it.used} seats remaining`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function UsersTab() {
   const [rows, setRows] = useState<any[]>([]);
   const load = () => supabase.from("app_users").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
