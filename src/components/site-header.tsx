@@ -62,7 +62,7 @@ export function SiteHeader() {
                   <LayoutDashboard className="h-4 w-4" /> Dashboard
                 </Link>
                 <button
-                  onClick={() => { clearSession(); window.location.href = "/"; }}
+                  onClick={logout}
                   className="btn-soft"
                 >
                   <LogOut className="h-4 w-4" /> Logout
@@ -92,7 +92,7 @@ export function SiteHeader() {
               {session ? (
                 <>
                   <Link to={dashHref} className="btn-soft w-full"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link>
-                  <button onClick={() => { clearSession(); window.location.href = "/"; }} className="btn-soft w-full">
+                  <button onClick={logout} className="btn-soft w-full">
                     <LogOut className="h-4 w-4" /> Logout
                   </button>
                 </>
