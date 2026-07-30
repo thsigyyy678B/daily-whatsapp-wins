@@ -48,6 +48,12 @@ function SignupBusiness() {
             <>
               <div className="text-xs uppercase tracking-widest text-primary">For business</div>
               <h1 className="mt-2 font-display text-2xl font-bold">Start a campaign</h1>
+              {full && (
+                <div className="mt-5 flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground">
+                  <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{CLOSED_MESSAGE}</span>
+                </div>
+              )}
               <form onSubmit={submit} className="mt-6 grid gap-4 sm:grid-cols-2">
                 <Field label="Business name"><input required className={inputCls} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></Field>
                 <Field label="Phone"><input required className={inputCls} value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} /></Field>
@@ -57,8 +63,9 @@ function SignupBusiness() {
                   <Field label="Target audience"><textarea className={inputCls} rows={3} value={f.target_audience} onChange={(e) => setF({ ...f, target_audience: e.target.value })} /></Field>
                 </div>
                 <div className="sm:col-span-2">
-                  <button className="btn-premium w-full">Create business account</button>
+                  <button className="btn-premium w-full" disabled={full}>Create business account</button>
                 </div>
+
               </form>
             </>
           ) : (
