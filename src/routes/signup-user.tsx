@@ -102,6 +102,12 @@ function SignupUser() {
               <div className="eyebrow">Step 01</div>
               <h1 className="mt-3 font-display text-3xl font-bold">Tell us about you</h1>
               <p className="mt-2 text-sm text-muted-foreground">Basic details so we can route your payouts correctly.</p>
+              {full && (
+                <div className="mt-6 flex items-start gap-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive-foreground">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{CLOSED_MESSAGE}</span>
+                </div>
+              )}
               <div className="mt-8 grid gap-5 sm:grid-cols-2">
                 <Field label="Full name" className="sm:col-span-2">
                   <input className={inputCls} placeholder="Your legal name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -114,10 +120,11 @@ function SignupUser() {
                 </Field>
               </div>
               <div className="mt-9 flex justify-end">
-                <button className="btn-premium px-7 py-3" disabled={!name || !phone} onClick={() => setStep(2)}>Continue</button>
+                <button className="btn-premium px-7 py-3" disabled={!name || !phone || full} onClick={() => setStep(2)}>Continue</button>
               </div>
             </>
           )}
+
 
           {step === 2 && (
             <DocStep
