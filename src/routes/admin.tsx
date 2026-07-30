@@ -30,7 +30,9 @@ function Admin() {
         <div className="glass rounded-3xl p-6">
           <div className="text-xs uppercase tracking-widest text-primary">Super admin</div>
           <h1 className="mt-2 font-display text-3xl font-bold">Control panel</h1>
+          <CapacityBar />
         </div>
+
 
         <div className="glass mt-6 flex flex-wrap gap-2 rounded-full p-2">
           {TABS.map((t) => (
