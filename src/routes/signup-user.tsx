@@ -47,6 +47,8 @@ function SignupUser() {
   const [creds, setCreds] = useState<{ u: string; p: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
+  const [full, setFull] = useState(false);
+
   useEffect(() => {
     supabase.from("settings").select("key,value").in("key", ["terms_url", "about_url"]).then(({ data }) => {
       data?.forEach((r) => {
@@ -54,7 +56,9 @@ function SignupUser() {
         if (r.key === "about_url") setAboutUrl(String(r.value ?? ""));
       });
     });
+    countRows("app_users").then((c) => setFull(c >= MAX_USERS));
   }, []);
+
 
   async function createAccount() {
     setBusy(true);
