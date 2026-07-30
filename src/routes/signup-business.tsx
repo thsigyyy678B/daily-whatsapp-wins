@@ -1,11 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { supabase } from "@/lib/supabase";
 import { randomCode, setSession } from "@/lib/session";
+import { CLOSED_MESSAGE, MAX_BUSINESSES, countRows } from "@/lib/limits";
 import { toast } from "sonner";
 import { inputCls, Field } from "./login";
-import { Check, Copy } from "lucide-react";
+import { Check, Copy, ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/signup-business")({
   head: () => ({ meta: [{ title: "Business Sign Up — Daily WhatsApp Challenge" }, { name: "description", content: "Run WhatsApp status ad campaigns." }] }),
@@ -17,15 +18,26 @@ function SignupBusiness() {
   const [f, setF] = useState({ name: "", phone: "", category: "", employees: "", target_audience: "" });
   const [creds, setCreds] = useState<{ u: string; p: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [full, setFull] = useState(false);
+
+  useEffect(() => {
+    countRows("businesses").then((c) => setFull(c >= MAX_BUSINESSES));
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    if ((await countRows("businesses")) >= MAX_BUSINESSES) {
+      setFull(true);
+      toast.error(CLOSED_MESSAGE);
+      return;
+    }
     const u = "B" + randomCode(3, true);
     const p = randomCode(4, true);
     const { error } = await supabase.from("businesses").insert({ ...f, username: u, password: p });
     if (error) { toast.error(error.message); return; }
     setCreds({ u, p });
   }
+
 
   return (
     <div className="min-h-screen">
