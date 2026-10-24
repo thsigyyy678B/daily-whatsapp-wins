@@ -1,11 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { supabase, driveToDirect } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { Download, Eye, Gift, Lock, Share2, Wallet } from "lucide-react";
+import { DriveMedia } from "@/components/drive-media";
+import { driveToDownload } from "@/lib/supabase";
 
 export const Route = createFileRoute("/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — Daily WhatsApp Challenge" }, { name: "description", content: "Your tasks and wallet." }] }),
@@ -106,12 +108,11 @@ function Empty({ label }: { label: string }) {
 function TaskCard({ task, mine, me, upi, onDone, freeLimitReached }: any) {
   const [open, setOpen] = useState(false);
   const assign = mine.find((a: any) => a.task_id === task.id);
-  const img = driveToDirect(task.image_url);
 
   return (
     <div className="glass overflow-hidden rounded-3xl">
       <div className="relative aspect-square overflow-hidden bg-black/50">
-        <img src={img} alt={task.name} className="h-full w-full object-cover" />
+        <DriveMedia url={task.image_url} alt={task.name} className="h-full w-full object-cover" />
         <div className="absolute left-3 top-3 rounded-full bg-background/70 px-3 py-1 text-xs backdrop-blur">
           {task.type === "paid" ? "⭐ Sponsored" : "Free"}
         </div>
@@ -124,8 +125,8 @@ function TaskCard({ task, mine, me, upi, onDone, freeLimitReached }: any) {
           <div className="mt-4 space-y-2">
             <div className="text-xs">Status: <span className="text-primary">{assign.status}</span></div>
             {assign.status === "assigned" && <SubmitProof assign={assign} onDone={onDone} />}
-            <a href={img} target="_blank" rel="noreferrer" className="btn-ghost-emerald w-full text-xs">
-              <Download className="h-3.5 w-3.5" /> Download image
+            <a href={driveToDownload(task.image_url)} target="_blank" rel="noreferrer" className="btn-ghost-emerald w-full text-xs">
+              <Download className="h-3.5 w-3.5" /> Download
             </a>
           </div>
         ) : (
