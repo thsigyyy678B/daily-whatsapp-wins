@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { supabase, driveToDirect } from "@/lib/supabase";
+import { DriveMedia } from "@/components/drive-media";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
@@ -190,7 +191,7 @@ function TasksTab() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {rows.map((t) => (
           <div key={t.id} className="glass overflow-hidden rounded-2xl">
-            <img src={driveToDirect(t.image_url)} className="aspect-video w-full object-cover" />
+            <DriveMedia url={t.image_url} alt={t.name} className="aspect-video w-full object-cover" />
             <div className="p-4">
               <div className="flex justify-between">
                 <div>
@@ -267,7 +268,7 @@ function SubmissionsTab() {
       {rows.map((a) => (
         <div key={a.id} className="glass rounded-2xl p-4">
           <div className="flex gap-3">
-            {a.proof_image_url && <img src={driveToDirect(a.proof_image_url)} className="h-24 w-24 rounded-xl object-cover" />}
+            {a.proof_image_url && <DriveMedia url={a.proof_image_url} alt="proof" className="h-24 w-24 rounded-xl object-cover" />}
             <div className="flex-1">
               <div className="font-semibold">{a.task?.name}</div>
               <div className="text-xs text-muted-foreground">@{a.user_username} · WA: {a.whatsapp_number}</div>
