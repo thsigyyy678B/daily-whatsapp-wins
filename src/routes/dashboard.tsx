@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { supabase, driveToDirect } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
