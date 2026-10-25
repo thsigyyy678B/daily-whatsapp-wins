@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
@@ -108,7 +109,7 @@ function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
     });
     if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
   }
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur" onClick={onClose}>
       <div className="glass w-full max-w-lg rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
         {step === 1 && (
@@ -149,6 +150,7 @@ function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
