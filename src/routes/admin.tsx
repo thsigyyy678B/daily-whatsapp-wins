@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
@@ -471,9 +472,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 function ModalAdmin({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur" onClick={onClose}>
       <div className="glass w-full max-w-md rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>{children}</div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -6,6 +6,8 @@ import {
   useRouter,
   HeadContent,
   Scripts,
+  type AsyncRouteComponent,
+  type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "sonner";
@@ -74,7 +76,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   shellComponent: RootShell,
   component: RootComponent,
   notFoundComponent: NotFoundComponent,
-  errorComponent: ErrorComponent,
+  errorComponent: ErrorComponent as AsyncRouteComponent<ErrorComponentProps>,
 });
 
 function RootShell({ children }: { children: ReactNode }) {

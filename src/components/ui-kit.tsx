@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Inbox, AlertTriangle, RotateCcw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -294,7 +295,7 @@ export function Modal({
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 grid animate-fade-in place-items-center overflow-y-auto bg-black/80 p-4 backdrop-blur-md"
       onClick={onClose}
@@ -325,7 +326,8 @@ export function Modal({
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
