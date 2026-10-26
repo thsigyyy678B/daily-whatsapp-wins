@@ -1,7 +1,7 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { getSession, clearSession } from "@/lib/session";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, LogIn, LogOut, Menu, Sparkles, X } from "lucide-react";
+import { LayoutDashboard, LogIn, LogOut, Menu, Sparkles, Wallet, X } from "lucide-react";
 
 export function SiteHeader() {
   const [session, setS] = useState<ReturnType<typeof getSession>>(null);
@@ -61,6 +61,11 @@ export function SiteHeader() {
                 <Link to={dashHref} className="btn-soft">
                   <LayoutDashboard className="h-4 w-4" /> Dashboard
                 </Link>
+                {session?.role === "user" && (
+                  <Link to="/wallet" className="btn-soft">
+                    <Wallet className="h-4 w-4" /> Wallet
+                  </Link>
+                )}
                 <button
                   onClick={logout}
                   className="btn-soft"
@@ -92,6 +97,9 @@ export function SiteHeader() {
               {session ? (
                 <>
                   <Link to={dashHref} className="btn-soft w-full"><LayoutDashboard className="h-4 w-4" /> Dashboard</Link>
+                  {session?.role === "user" && (
+                    <Link to="/wallet" className="btn-soft w-full"><Wallet className="h-4 w-4" /> Wallet</Link>
+                  )}
                   <button onClick={logout} className="btn-soft w-full">
                     <LogOut className="h-4 w-4" /> Logout
                   </button>
