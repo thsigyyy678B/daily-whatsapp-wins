@@ -2,7 +2,8 @@ import { createPortal } from "react-dom";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { supabase, driveToDirect } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import { DriveMedia } from "@/components/drive-media";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
@@ -75,7 +76,7 @@ function Business() {
         <div className="grid gap-4 md:grid-cols-2">
           {camps.map((c) => (
             <div key={c.id} className="glass rounded-2xl p-4">
-              <img src={driveToDirect(c.image_url)} className="aspect-video w-full rounded-xl object-cover" />
+              <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full rounded-xl object-cover" />
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-xs text-muted-foreground">Txn: {c.transaction_id}</div>
                 <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>

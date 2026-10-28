@@ -2,7 +2,7 @@ import { createPortal } from "react-dom";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { supabase, driveToDirect } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { DriveMedia } from "@/components/drive-media";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
@@ -342,21 +342,30 @@ function CampaignsTab() {
     await supabase.from("campaigns").update({ status, reject_reason: reason }).eq("id", c.id);
     toast.success(status); load();
   }
+  async function del(c: any) {
+    if (!confirm("Delete this campaign? This removes it permanently.")) return;
+    const { error } = await supabase.from("campaigns").delete().eq("id", c.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Deleted"); load(); }
+  }
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {rows.map((c) => (
         <div key={c.id} className="glass overflow-hidden rounded-2xl">
-          <img src={driveToDirect(c.image_url)} className="aspect-video w-full object-cover" />
+          <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full object-cover" />
           <div className="p-4">
             <div className="text-xs uppercase text-primary">@{c.business_username}</div>
             <div className="text-sm">₹{c.amount} · Txn: {c.transaction_id}</div>
             <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}</div>
-            {c.status === "pending" && (
-              <div className="mt-3 flex gap-2">
-                <button onClick={() => act(c, "approved")} className="btn-premium text-xs">Approve</button>
-                <button onClick={() => act(c, "rejected")} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Reject</button>
-              </div>
-            )}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {c.status === "pending" && (
+                <>
+                  <button onClick={() => act(c, "approved")} className="btn-premium text-xs">Approve</button>
+                  <button onClick={() => act(c, "rejected")} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Reject</button>
+                </>
+              )}
+              <button onClick={() => del(c)} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Delete</button>
+            </div>
           </div>
         </div>
       ))}
@@ -440,9 +449,21 @@ function SettingsTab() {
       <Section title="Homepage carousel (2 images, changes every 6s)">
         {[0, 1].map((i) => (
           <Field key={i} label={`Image ${i + 1} Drive URL`}>
-            <input className={inputCls} value={carousel[i] ?? ""} onChange={(e) => {
-              const c = [...carousel]; c[i] = e.target.value; upd("carousel_images", c);
-            }} onBlur={() => save("carousel_images", carousel)} />
+            <div className="flex gap-2">
+              <input className={inputCls} value={carousel[i] ?? ""} onChange={(e) => {
+                const c = [...carousel]; c[i] = e.target.value; upd("carousel_images", c);
+              }} onBlur={() => save("carousel_images", carousel)} />
+              <button
+                className="btn-soft shrink-0"
+                onClick={() => {
+                  const c = [...carousel]; c[i] = "";
+                  upd("carousel_images", c);
+                  save("carousel_images", c);
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </Field>
         ))}
       </Section>
