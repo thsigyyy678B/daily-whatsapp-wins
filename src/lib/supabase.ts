@@ -23,12 +23,24 @@ export function driveId(link: string): string | null {
   return p ? p[1] : null;
 }
 
-// Convert Google Drive share links (https://drive.google.com/file/d/<ID>/view) to direct image URLs.
+// Convert Google Drive share links to a direct image URL that <img> can load.
 export function driveToDirect(link: string): string {
   if (!link) return link;
   const id = driveId(link);
-  if (id) return `https://drive.google.com/uc?export=view&id=${id}`;
-  return link;
+  return id ? `https://lh3.googleusercontent.com/d/${id}` : link;
+}
+
+// Google serves some files through different URL formats, so images try these
+// in order until one loads.
+export function driveCandidates(link: string): string[] {
+  if (!link) return [link];
+  const id = driveId(link);
+  if (!id) return [link];
+  return [
+    `https://lh3.googleusercontent.com/d/${id}`,
+    `https://drive.google.com/thumbnail?id=${id}&sz=w2000`,
+    `https://drive.google.com/uc?export=view&id=${id}`,
+  ];
 }
 
 // In-browser preview embed; works for both images and Drive videos (playable).

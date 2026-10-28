@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
-import { supabase, driveToDirect } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
+import { DriveMedia } from "@/components/drive-media";
 import {
   ArrowRight, ArrowUpRight, BadgeCheck, Coins, Eye, Gift, Megaphone,
   Rocket, ShieldCheck, Sparkles, Target, Users, Wallet,
@@ -27,7 +28,7 @@ function useCarousel() {
     supabase.from("settings").select("value").eq("key", "carousel_images").maybeSingle()
       .then(({ data }) => {
         const arr = (data?.value as string[] | null) ?? [];
-        setImages(arr.filter(Boolean).map(driveToDirect));
+        setImages(arr.filter(Boolean));
       });
   }, []);
   useEffect(() => {
@@ -341,11 +342,10 @@ function Home() {
             <div className="eyebrow"><Sparkles className="h-3.5 w-3.5" /> Featured campaigns</div>
             <div className="glass relative mt-4 aspect-[16/9] w-full overflow-hidden rounded-[1.75rem] sm:aspect-[16/7]">
               {images.map((src, idx) => (
-                <img
+                <DriveMedia
                   key={src + idx}
-                  src={src}
+                  url={src}
                   alt={`Featured campaign ${idx + 1}`}
-                  loading="lazy"
                   className={`absolute inset-0 h-full w-full object-cover transition-all duration-1000 ${
                     idx === index ? "scale-100 opacity-100" : "scale-105 opacity-0"
                   }`}
