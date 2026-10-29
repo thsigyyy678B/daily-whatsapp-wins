@@ -364,7 +364,13 @@ function CampaignsTab() {
           <div className="p-4">
             <div className="text-xs uppercase text-primary">@{c.business_username}</div>
             <div className="text-sm">₹{c.amount} · Txn: {c.transaction_id}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}{c.package_name ? ` · ${c.package_name}` : ""} · Views: {c.views ?? 0}</div>
+            {c.status === "approved" && (
+              <div className="mt-2 flex items-center gap-2">
+                <input type="number" min={0} placeholder="New views" value={viewsDraft[c.id] ?? ""} onChange={(e) => setViewsDraft({ ...viewsDraft, [c.id]: e.target.value })} className={`${inputCls} w-32 py-1.5 text-xs`} />
+                <button onClick={() => setViews(c)} className="btn-soft text-xs">Update views</button>
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap gap-2">
               {c.status === "pending" && (
                 <>
@@ -415,13 +421,20 @@ function WithdrawalsTab() {
   );
 }
 
+type Pkg = { name?: string; amount?: number; views?: number; duration?: string; short?: string; long_url?: string };
+const emptyPkg = (): Pkg => ({ name: "", amount: 0, views: 0, duration: "", short: "", long_url: "" });
+
 function SettingsTab() {
   const [s, setS] = useState<Record<string, any>>({});
+  const [pkgs, setPkgs] = useState<Pkg[]>([emptyPkg(), emptyPkg(), emptyPkg()]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     supabase.from("settings").select("key,value").then(({ data }) => {
       const o: Record<string, any> = {};
       data?.forEach((r) => { o[r.key] = r.value; });
+      const list: Pkg[] = Array.isArray(o.business_packages) ? o.business_packages.slice(0, 3) : o.business_package?.name ? [o.business_package] : [];
+      while (list.length < 3) list.push(emptyPkg());
+      setPkgs(list);
       setS(o); setLoaded(true);
     });
   }, []);
@@ -433,7 +446,6 @@ function SettingsTab() {
   function upd(k: string, v: any) { setS({ ...s, [k]: v }); }
 
   if (!loaded) return <div className="p-10 text-center text-muted-foreground">Loading…</div>;
-  const pkg = s.business_package ?? { name: "", amount: 0, views: 0, short: "", long_url: "", duration: "" };
   const carousel: string[] = Array.isArray(s.carousel_images) ? s.carousel_images : [];
 
   return (
@@ -476,16 +488,29 @@ function SettingsTab() {
         ))}
       </Section>
 
-      <Section title="Business package (only 1 active)">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Package name"><input className={inputCls} value={pkg.name} onChange={(e) => upd("business_package", { ...pkg, name: e.target.value })} /></Field>
-          <Field label="Amount (₹)"><input type="number" className={inputCls} value={pkg.amount} onChange={(e) => upd("business_package", { ...pkg, amount: Number(e.target.value) })} /></Field>
-          <Field label="Expected reach (views)"><input type="number" className={inputCls} value={pkg.views} onChange={(e) => upd("business_package", { ...pkg, views: Number(e.target.value) })} /></Field>
-          <Field label="Campaign duration"><input className={inputCls} value={pkg.duration} onChange={(e) => upd("business_package", { ...pkg, duration: e.target.value })} /></Field>
-          <div className="sm:col-span-2"><Field label="Short description (≤100 chars)"><input maxLength={100} className={inputCls} value={pkg.short} onChange={(e) => upd("business_package", { ...pkg, short: e.target.value })} /></Field></div>
-          <div className="sm:col-span-2"><Field label="Long description Google Docs URL"><input className={inputCls} value={pkg.long_url} onChange={(e) => upd("business_package", { ...pkg, long_url: e.target.value })} /></Field></div>
+      <Section title="Business packages (up to 3)">
+        <div className="space-y-4">
+          {pkgs.map((p, i) => (
+            <div key={i} className="rounded-2xl border border-border bg-black/30 p-4">
+              <div className="flex items-center justify-between">
+                <div className="text-xs uppercase tracking-widest text-primary">Package {i + 1}{p.name ? ` · ${p.name}` : " · empty"}</div>
+                {p.name && (
+                  <button className="text-xs text-destructive-foreground/80 hover:underline" onClick={() => { const n = [...pkgs]; n[i] = emptyPkg(); setPkgs(n); save("business_packages", n); }}>Clear</button>
+                )}
+              </div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <Field label="Package name"><input className={inputCls} value={p.name ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, name: e.target.value }; setPkgs(n); }} /></Field>
+                <Field label="Amount (₹)"><input type="number" className={inputCls} value={p.amount ?? 0} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, amount: Number(e.target.value) }; setPkgs(n); }} /></Field>
+                <Field label="Expected reach (views)"><input type="number" className={inputCls} value={p.views ?? 0} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, views: Number(e.target.value) }; setPkgs(n); }} /></Field>
+                <Field label="Campaign duration"><input className={inputCls} value={p.duration ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, duration: e.target.value }; setPkgs(n); }} /></Field>
+                <div className="sm:col-span-2"><Field label="Short description (≤100 chars)"><input maxLength={100} className={inputCls} value={p.short ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, short: e.target.value }; setPkgs(n); }} /></Field></div>
+                <div className="sm:col-span-2"><Field label="Long description Google Docs URL"><input className={inputCls} value={p.long_url ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, long_url: e.target.value }; setPkgs(n); }} /></Field></div>
+              </div>
+              <button className="btn-premium mt-4" onClick={() => save("business_packages", pkgs)}>Save package {i + 1}</button>
+            </div>
+          ))}
         </div>
-        <button className="btn-premium mt-4" onClick={() => save("business_package", pkg)}>Save package</button>
+        <p className="mt-3 text-xs text-muted-foreground">Fill at least the package name to make a package visible to businesses. Each Save button saves all 3 slots.</p>
       </Section>
     </div>
   );
