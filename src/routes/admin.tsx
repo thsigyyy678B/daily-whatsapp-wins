@@ -37,7 +37,6 @@ function Admin() {
           <CapacityBar />
         </div>
 
-
         <div className="glass mt-6 flex flex-wrap gap-2 rounded-full p-2">
           {TABS.map((t) => (
             <button key={t} onClick={() => setTab(t)} className={`rounded-full px-4 py-2 text-sm transition ${tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{t}</button>
@@ -336,8 +335,12 @@ function BusinessesTab() {
 function CampaignsTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [viewsDraft, setViewsDraft] = useState<Record<string, string>>({});
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const load = () => supabase.from("campaigns").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
+
   async function setViews(c: any) {
     const n = Number(viewsDraft[c.id]);
     if (!Number.isFinite(n) || n < 0) { toast.error("Enter a valid number of views"); return; }
@@ -345,18 +348,24 @@ function CampaignsTab() {
     if (error) toast.error(error.message);
     else { toast.success("Views updated"); setViewsDraft({ ...viewsDraft, [c.id]: "" }); load(); }
   }
+
   async function act(c: any, status: "approved" | "rejected") {
     const reason = status === "rejected" ? prompt("Reason?") ?? "" : null;
     await supabase.from("campaigns").update({ status, reject_reason: reason }).eq("id", c.id);
     toast.success(status); load();
   }
+
   async function del(c: any) {
-    if (!confirm("Delete this campaign? This removes it permanently.")) return;
+    if (deleting) return;
+    setDeleting(true);
+
     const { data, error } = await supabase
       .from("campaigns")
       .delete()
       .eq("id", c.id)
       .select("id");
+
+    setDeleting(false);
 
     if (error) {
       console.error("Campaign deletion failed:", error);
@@ -371,8 +380,10 @@ function CampaignsTab() {
     }
 
     toast.success("Campaign deleted successfully");
+    setDeleteTarget(null);
     await load();
   }
+
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {rows.map((c) => (
@@ -395,12 +406,42 @@ function CampaignsTab() {
                   <button onClick={() => act(c, "rejected")} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Reject</button>
                 </>
               )}
-              <button onClick={() => del(c)} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Delete</button>
+              <button onClick={() => setDeleteTarget(c)} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Delete</button>
             </div>
           </div>
         </div>
       ))}
       {rows.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-muted-foreground">No campaigns.</div>}
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur"
+          onClick={() => !deleting && setDeleteTarget(null)}
+        >
+          <div className="glass w-full max-w-md rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-lg font-bold">Delete campaign?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently removes the campaign for @{deleteTarget.business_username}. This action cannot be undone.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-full border border-border px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={() => del(deleteTarget)}
+                className="rounded-full border border-destructive/50 px-4 py-2 text-sm text-destructive-foreground disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
