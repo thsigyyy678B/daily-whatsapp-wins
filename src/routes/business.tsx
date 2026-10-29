@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { SiteHeader } from "@/components/site-header";
 import { supabase } from "@/lib/supabase";
@@ -7,7 +7,7 @@ import { DriveMedia } from "@/components/drive-media";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
-import { Rocket } from "lucide-react";
+import { BarChart3, Rocket } from "lucide-react";
 
 export const Route = createFileRoute("/business")({
   head: () => ({ meta: [{ title: "Business — Daily WhatsApp Challenge" }, { name: "description", content: "Run status ad campaigns." }] }),
@@ -17,7 +17,8 @@ export const Route = createFileRoute("/business")({
 function Business() {
   const nav = useNavigate();
   const [me, setMe] = useState<any>(null);
-  const [pkg, setPkg] = useState<any>(null);
+  const [pkgs, setPkgs] = useState<any[]>([]);
+  const [sel, setSel] = useState<any>(null);
   const [upi, setUpi] = useState("");
   const [rejTerms, setRejTerms] = useState("");
   const [camps, setCamps] = useState<any[]>([]);
@@ -28,16 +29,20 @@ function Business() {
     if (!s || s.role !== "business") { nav({ to: "/login" }); return; }
     const [{ data: b }, { data: settings }, { data: c }] = await Promise.all([
       supabase.from("businesses").select("*").eq("username", s.username).maybeSingle(),
-      supabase.from("settings").select("key,value").in("key", ["business_package", "upi_id", "rejection_terms_url"]),
+      supabase.from("settings").select("key,value").in("key", ["business_packages", "business_package", "upi_id", "rejection_terms_url"]),
       supabase.from("campaigns").select("*").eq("business_username", s.username).order("created_at", { ascending: false }),
     ]);
     setMe(b);
     setCamps(c ?? []);
+    let list: any[] = [];
     settings?.forEach((r) => {
-      if (r.key === "business_package") setPkg(r.value);
       if (r.key === "upi_id") setUpi(String(r.value ?? ""));
       if (r.key === "rejection_terms_url") setRejTerms(String(r.value ?? ""));
+      if (r.key === "business_packages" && Array.isArray(r.value)) list = [...r.value];
+      if (r.key === "business_package" && (r.value as any)?.name && list.length === 0) list = [r.value];
     });
+    while (list.length < 3) list.push({});
+    setPkgs(list.slice(0, 3));
   }, [nav]);
 
   useEffect(() => { load(); }, [load]);
@@ -50,25 +55,31 @@ function Business() {
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="glass rounded-3xl p-6">
           <div className="text-xs uppercase tracking-widest text-primary">Business account</div>
-          <h1 className="mt-2 font-display text-3xl font-bold">{me.name}</h1>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+            <h1 className="font-display text-3xl font-bold">{me.name}</h1>
+            <Link to="/status" className="btn-soft"><BarChart3 className="h-4 w-4" /> Status page</Link>
+          </div>
           <div className="mt-1 text-sm text-muted-foreground">@{me.username} · {me.category}</div>
         </div>
 
-        {/* Package */}
+        {/* Packages */}
         <div className="mt-6 glass glow-emerald rounded-3xl p-8">
-          <div className="text-xs uppercase tracking-widest text-primary">Available package</div>
-          {pkg?.name ? (
-            <>
-              <div className="mt-2 flex flex-wrap items-baseline gap-4">
-                <h2 className="font-display text-3xl font-bold">{pkg.name}</h2>
-                <span className="text-gradient-emerald font-display text-2xl">₹{pkg.amount}</span>
-                <span className="text-sm text-muted-foreground">· {pkg.views}+ views · {pkg.duration}</span>
+          <div className="text-xs uppercase tracking-widest text-primary">Available packages</div>
+          <div className="mt-4 grid gap-4 md:grid-cols-3">
+            {pkgs.filter((p) => p?.name).map((p, i) => (
+              <div key={i} className="flex flex-col rounded-2xl border border-border bg-black/30 p-5">
+                <h2 className="font-display text-xl font-bold">{p.name}</h2>
+                <div className="text-gradient-emerald mt-1 font-display text-2xl">₹{p.amount}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{p.views}+ views · {p.duration}</div>
+                <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
+                {p.long_url && <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">Full details →</a>}
+                <button onClick={() => { setSel(p); setOpen(true); }} className="btn-premium mt-4"><Rocket className="h-4 w-4" /> Create campaign</button>
               </div>
-              <p className="mt-3 text-sm text-muted-foreground">{pkg.short}</p>
-              {pkg.long_url && <a href={pkg.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">Full details →</a>}
-              <button onClick={() => setOpen(true)} className="btn-premium mt-6"><Rocket className="h-4 w-4" /> Create campaign</button>
-            </>
-          ) : <p className="mt-2 text-sm text-muted-foreground">No package configured yet — check back soon.</p>}
+            ))}
+            {pkgs.filter((p) => p?.name).length === 0 && (
+              <p className="text-sm text-muted-foreground md:col-span-3">No packages configured yet — check back soon.</p>
+            )}
+          </div>
         </div>
 
         {/* Campaigns */}
@@ -88,7 +99,7 @@ function Business() {
         </div>
       </div>
 
-      {open && pkg?.name && <CampaignModal pkg={pkg} upi={upi} rejTerms={rejTerms} me={me} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
+      {open && sel?.name && <CampaignModal pkg={sel} upi={upi} rejTerms={rejTerms} me={me} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
     </div>
   );
 }
@@ -107,6 +118,7 @@ function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
   async function submit() {
     const { error } = await supabase.from("campaigns").insert({
       business_username: me.username, image_url: image, transaction_id: txn, amount: pkg.amount,
+      package_name: pkg.name ?? "", expected_views: Number(pkg.views) || 0,
     });
     if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
   }
