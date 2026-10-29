@@ -148,6 +148,9 @@ function TasksTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [type, setType] = useState<"free" | "paid">("free");
   const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" });
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const load = () => supabase.from("tasks").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
 
@@ -162,12 +165,52 @@ function TasksTab() {
     if (error) toast.error(error.message);
     else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" }); load(); }
   }
+
   async function del(t: any) {
-    const { data: taken } = await supabase.from("task_assignments").select("id").eq("task_id", t.id).in("status", ["assigned", "submitted"]).limit(1);
-    if (taken && taken.length) { toast.error("Cannot delete — task currently taken by a user."); return; }
-    if (!confirm("Delete task?")) return;
-    const { error } = await supabase.from("tasks").delete().eq("id", t.id);
-    if (error) toast.error(error.message); else { toast.success("Deleted"); load(); }
+    if (deleting) return;
+
+    const { data: taken, error: takenError } = await supabase
+      .from("task_assignments")
+      .select("id")
+      .eq("task_id", t.id)
+      .in("status", ["assigned", "submitted"])
+      .limit(1);
+
+    if (takenError) {
+      toast.error(`Could not check task assignments: ${takenError.message}`);
+      return;
+    }
+
+    if (taken && taken.length > 0) {
+      toast.error("Cannot delete — task currently taken by a user.");
+      return;
+    }
+
+    setDeleting(true);
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .delete()
+      .eq("id", t.id)
+      .select("id");
+
+    setDeleting(false);
+
+    if (error) {
+      console.error("Task deletion failed:", error);
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast.error("No task was deleted. Please refresh and try again.");
+      await load();
+      return;
+    }
+
+    toast.success("Task deleted successfully");
+    setDeleteTarget(null);
+    await load();
   }
 
   return (
@@ -198,7 +241,7 @@ function TasksTab() {
                   <div className="text-xs uppercase text-primary">{t.type}</div>
                   <div className="font-semibold">{t.name}</div>
                 </div>
-                <button onClick={() => del(t)} className="text-destructive-foreground/80"><Trash2 className="h-4 w-4" /></button>
+                <button onClick={() => setDeleteTarget(t)} className="text-destructive-foreground/80"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">₹{t.payout} · {t.required_views}+ views{t.type === "paid" && ` · unlock ₹${t.unlock_amount}`}</div>
               <TakenList taskId={t.id} />
@@ -206,6 +249,45 @@ function TasksTab() {
           </div>
         ))}
       </div>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur"
+          onClick={() => !deleting && setDeleteTarget(null)}
+        >
+          <div
+            className="glass w-full max-w-md rounded-3xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-bold">
+              Delete task?
+            </h3>
+
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently deletes the task "{deleteTarget.name}". This action
+              cannot be undone.
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-full border border-border px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                disabled={deleting}
+                onClick={() => del(deleteTarget)}
+                className="rounded-full border border-destructive/50 px-4 py-2 text-sm text-destructive-foreground disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -258,6 +340,7 @@ function SubmissionsTab() {
     }
     toast.success("Approved & credited"); load();
   }
+
   async function reject(a: any, reason: string) {
     await supabase.from("task_assignments").update({ status: "rejected", reject_reason: reason, reviewed_at: new Date().toISOString() }).eq("id", a.id);
     toast.success("Rejected"); load();
