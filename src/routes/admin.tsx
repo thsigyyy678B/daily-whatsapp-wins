@@ -335,8 +335,16 @@ function BusinessesTab() {
 
 function CampaignsTab() {
   const [rows, setRows] = useState<any[]>([]);
+  const [viewsDraft, setViewsDraft] = useState<Record<string, string>>({});
   const load = () => supabase.from("campaigns").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
+  async function setViews(c: any) {
+    const n = Number(viewsDraft[c.id]);
+    if (!Number.isFinite(n) || n < 0) { toast.error("Enter a valid number of views"); return; }
+    const { error } = await supabase.from("campaigns").update({ views: n }).eq("id", c.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Views updated"); setViewsDraft({ ...viewsDraft, [c.id]: "" }); load(); }
+  }
   async function act(c: any, status: "approved" | "rejected") {
     const reason = status === "rejected" ? prompt("Reason?") ?? "" : null;
     await supabase.from("campaigns").update({ status, reject_reason: reason }).eq("id", c.id);

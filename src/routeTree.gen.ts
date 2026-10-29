@@ -16,6 +16,7 @@ import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupBusinessRouteImport } from './routes/signup-business'
 import { Route as SignupUserRouteImport } from './routes/signup-user'
+import { Route as StatusRouteImport } from './routes/status'
 import { Route as WalletRouteImport } from './routes/wallet'
 
 const IndexRoute = IndexRouteImport.update({
@@ -53,6 +54,11 @@ const SignupUserRoute = SignupUserRouteImport.update({
   path: '/signup-user',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const WalletRoute = WalletRouteImport.update({
   id: '/wallet',
   path: '/wallet',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
+  '/status': typeof StatusRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
+  '/status': typeof StatusRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signup-business': typeof SignupBusinessRoute
   '/signup-user': typeof SignupUserRoute
+  '/status': typeof StatusRoute
   '/wallet': typeof WalletRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup-business'
     | '/signup-user'
+    | '/status'
     | '/wallet'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup-business'
     | '/signup-user'
+    | '/status'
     | '/wallet'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/signup-business'
     | '/signup-user'
+    | '/status'
     | '/wallet'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   SignupBusinessRoute: typeof SignupBusinessRoute
   SignupUserRoute: typeof SignupUserRoute
+  StatusRoute: typeof StatusRoute
   WalletRoute: typeof WalletRoute
 }
 
@@ -185,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupUserRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/wallet': {
       id: '/wallet'
       path: '/wallet'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   SignupBusinessRoute: SignupBusinessRoute,
   SignupUserRoute: SignupUserRoute,
+  StatusRoute: StatusRoute,
   WalletRoute: WalletRoute,
 }
 export const routeTree = rootRouteImport
