@@ -352,9 +352,26 @@ function CampaignsTab() {
   }
   async function del(c: any) {
     if (!confirm("Delete this campaign? This removes it permanently.")) return;
-    const { error } = await supabase.from("campaigns").delete().eq("id", c.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Deleted"); load(); }
+    const { data, error } = await supabase
+      .from("campaigns")
+      .delete()
+      .eq("id", c.id)
+      .select("id");
+
+    if (error) {
+      console.error("Campaign deletion failed:", error);
+      toast.error(`Delete failed: ${error.message}`);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast.error("No campaign was deleted. Please refresh and try again.");
+      await load();
+      return;
+    }
+
+    toast.success("Campaign deleted successfully");
+    await load();
   }
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
