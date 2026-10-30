@@ -15,7 +15,7 @@ export const Route = createFileRoute("/dashboard")({
   component: Dashboard,
 });
 
-type Task = { id: string; type: "free" | "paid"; name: string; image_url: string; required_views: number; payout: number; unlock_amount: number };
+type Task = { id: string; type: "free" | "paid"; name: string; image_url: string; required_views: number; payout: number; unlock_amount: number; max_takers: number };
 type Assign = { id: string; task_id: string; status: string; whatsapp_number: string; task?: Task };
 
 function Dashboard() {
@@ -23,23 +23,30 @@ function Dashboard() {
   const [me, setMe] = useState<any>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [mine, setMine] = useState<Assign[]>([]);
-  const [maxFree, setMaxFree] = useState(5);
+  const [maxFree, setMaxFree] = useState(2);
   const [upi, setUpi] = useState("");
+  const [takers, setTakers] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     const s = getSession();
     if (!s || s.role !== "user") { nav({ to: "/login" }); return; }
-    const [{ data: u }, { data: t }, { data: a }, { data: settings }] = await Promise.all([
+    const [{ data: u }, { data: t }, { data: a }, { data: allA }, { data: settings }] = await Promise.all([
       supabase.from("app_users").select("*").eq("username", s.username).maybeSingle(),
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase.from("task_assignments").select("*").eq("user_username", s.username).order("assigned_at", { ascending: false }),
-      supabase.from("settings").select("key,value").in("key", ["max_free_task_per_user", "upi_id"]),
+      supabase.from("task_assignments").select("task_id,status"),
+      supabase.from("settings").select("key,value").in("key", ["free_tasks_per_24h", "upi_id"]),
     ]);
     setMe(u);
     setTasks((t ?? []) as Task[]);
     setMine((a ?? []) as Assign[]);
+    const counts: Record<string, number> = {};
+    ((allA ?? []) as any[]).forEach((x) => {
+      if (x.status === "assigned" || x.status === "submitted") counts[x.task_id] = (counts[x.task_id] ?? 0) + 1;
+    });
+    setTakers(counts);
     settings?.forEach((r) => {
-      if (r.key === "max_free_task_per_user") setMaxFree(Number(r.value));
+      if (r.key === "free_tasks_per_24h") setMaxFree(Number(r.value));
       if (r.key === "upi_id") setUpi(String(r.value ?? ""));
     });
   }, [nav]);
@@ -48,7 +55,8 @@ function Dashboard() {
 
   if (!me) return <div className="min-h-screen"><SiteHeader /><div className="p-10 text-center text-muted-foreground">Loading…</div></div>;
 
-  const freeAssignedToday = mine.filter((a) => a.status !== "rejected" && tasks.find((t) => t.id === a.task_id)?.type === "free").length;
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const freeTaken24h = mine.filter((a) => a.status !== "rejected" && Date.now() - new Date(a.assigned_at).getTime() < DAY_MS && tasks.find((t) => t.id === a.task_id)?.type === "free").length;
 
   return (
     <div className="min-h-screen">
