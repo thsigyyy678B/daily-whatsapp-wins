@@ -331,15 +331,18 @@ function TasksTab() {
   );
 }
 
-function TakenList({ taskId }: { taskId: string }) {
+function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }) {
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("task_assignments").select("user_username,whatsapp_number,status").eq("task_id", taskId).then(({ data }) => setRows(data ?? []));
   }, [taskId]);
-  if (rows.length === 0) return <div className="mt-3 text-xs text-muted-foreground">No takers.</div>;
+  const active = rows.filter((r) => r.status === "assigned" || r.status === "submitted").length;
+  const limited = (maxTakers ?? 0) > 0;
+  if (rows.length === 0)
+    return <div className="mt-3 text-xs text-muted-foreground">{limited ? `0/${maxTakers} taken` : "No takers."}</div>;
   return (
     <div className="mt-3">
-      <div className="text-xs uppercase text-muted-foreground">Taken by</div>
+      <div className="text-xs uppercase text-muted-foreground">{limited ? `Taken by · ${active}/${maxTakers}` : "Taken by"}</div>
       <ul className="mt-1 space-y-1 text-xs">
         {rows.map((r, i) => <li key={i} className="text-primary">@{r.user_username} · {r.whatsapp_number} · {r.status}</li>)}
       </ul>
