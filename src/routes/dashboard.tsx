@@ -16,7 +16,7 @@ export const Route = createFileRoute("/dashboard")({
 });
 
 type Task = { id: string; type: "free" | "paid"; name: string; image_url: string; required_views: number; payout: number; unlock_amount: number; max_takers: number };
-type Assign = { id: string; task_id: string; status: string; whatsapp_number: string; task?: Task };
+type Assign = { id: string; task_id: string; status: string; whatsapp_number: string; assigned_at: string; task?: Task };
 
 function Dashboard() {
   const nav = useNavigate();
