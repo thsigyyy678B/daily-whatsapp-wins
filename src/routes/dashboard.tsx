@@ -81,16 +81,16 @@ function Dashboard() {
         <SectionTitle title="Sponsored tasks" subtitle="Higher payout · Unlock to take" />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {tasks.filter((t) => t.type === "paid").map((t) => (
-            <TaskCard key={t.id} task={t} mine={mine} me={me} upi={upi} onDone={load} />
+            <TaskCard key={t.id} task={t} mine={mine} me={me} upi={upi} onDone={load} takenCount={takers[t.id] ?? 0} />
           ))}
           {tasks.filter((t) => t.type === "paid").length === 0 && <Empty label="No sponsored tasks yet" />}
         </div>
 
         {/* Free */}
-        <SectionTitle title="Free tasks" subtitle={`Take up to ${maxFree} active free tasks`} />
+        <SectionTitle title="Free tasks" subtitle={`Take up to ${maxFree} free tasks every 24 hours`} />
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {tasks.filter((t) => t.type === "free").map((t) => (
-            <TaskCard key={t.id} task={t} mine={mine} me={me} upi={upi} onDone={load} freeLimitReached={freeAssignedToday >= maxFree} />
+            <TaskCard key={t.id} task={t} mine={mine} me={me} upi={upi} onDone={load} freeLimitReached={freeTaken24h >= maxFree} takenCount={takers[t.id] ?? 0} />
           ))}
           {tasks.filter((t) => t.type === "free").length === 0 && <Empty label="No free tasks right now" />}
         </div>
@@ -113,9 +113,10 @@ function Empty({ label }: { label: string }) {
   return <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">{label}</div>;
 }
 
-function TaskCard({ task, mine, me, upi, onDone, freeLimitReached }: any) {
+function TaskCard({ task, mine, me, upi, onDone, freeLimitReached, takenCount }: any) {
   const [open, setOpen] = useState(false);
   const assign = mine.find((a: any) => a.task_id === task.id);
+  const full = (task.max_takers ?? 0) > 0 && takenCount >= task.max_takers;
 
   return (
     <div className="glass overflow-hidden rounded-3xl">
@@ -129,6 +130,11 @@ function TaskCard({ task, mine, me, upi, onDone, freeLimitReached }: any) {
       <div className="p-4">
         <div className="font-semibold">{task.name}</div>
         <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground"><Eye className="h-3 w-3" /> {task.required_views}+ views · 24h</div>
+        {(task.max_takers ?? 0) > 0 && (
+          <div className={`mt-1 text-xs ${full ? "text-amber-400" : "text-muted-foreground"}`}>
+            {full ? "Task fully occupied" : `Taken ${takenCount}/${task.max_takers}`}
+          </div>
+        )}
         {assign ? (
           <div className="mt-4 space-y-2">
             <div className="text-xs">Status: <span className="text-primary">{assign.status}</span></div>
@@ -139,11 +145,11 @@ function TaskCard({ task, mine, me, upi, onDone, freeLimitReached }: any) {
           </div>
         ) : (
           <button
-            disabled={task.type === "free" && freeLimitReached}
+            disabled={(task.type === "free" && freeLimitReached) || full}
             onClick={() => setOpen(true)}
             className="btn-premium mt-4 w-full text-sm"
           >
-            {task.type === "paid" ? <><Lock className="h-4 w-4" /> Unlock ₹{task.unlock_amount}</> : "Take task"}
+            {full ? "Task fully occupied" : task.type === "paid" ? <><Lock className="h-4 w-4" /> Unlock ₹{task.unlock_amount}</> : "Take task"}
           </button>
         )}
       </div>
