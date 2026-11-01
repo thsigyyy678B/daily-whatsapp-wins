@@ -19,12 +19,45 @@ export const Route = createFileRoute("/admin")({
 const TABS = ["Users", "Tasks", "Submissions", "Businesses", "Campaigns", "Withdrawals", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
+// Silent backend cleanup: an earner account with no task taken in the last
+// 3 days is deleted, together with its assignments, wallet history and
+// withdrawal requests. Runs when the super admin opens the panel.
+const INACTIVE_MS = 3 * 24 * 60 * 60 * 1000;
+
+async function purgeInactiveUsers() {
+  const [{ data: users }, { data: assigns }] = await Promise.all([
+    supabase.from("app_users").select("username,created_at"),
+    supabase.from("task_assignments").select("user_username,assigned_at"),
+  ]);
+  if (!users) return;
+  const lastTaken = new Map<string, number>();
+  (assigns ?? []).forEach((a) => {
+    const t = new Date(a.assigned_at).getTime();
+    if (t > (lastTaken.get(a.user_username) ?? 0)) lastTaken.set(a.user_username, t);
+  });
+  const now = Date.now();
+  const stale = users.filter((u) => {
+    const taken = lastTaken.get(u.username);
+    const last = taken ?? new Date(u.created_at).getTime();
+    return now - last > INACTIVE_MS;
+  });
+  for (const u of stale) {
+    await supabase.from("task_assignments").delete().eq("user_username", u.username);
+    await supabase.from("wallet_history").delete().eq("user_username", u.username);
+    await supabase.from("withdrawals").delete().eq("user_username", u.username);
+    await supabase.from("app_users").delete().eq("username", u.username);
+  }
+}
+
+
 function Admin() {
   const nav = useNavigate();
   const [tab, setTab] = useState<Tab>("Tasks");
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const s = getSession();
-    if (!s || s.role !== "admin") nav({ to: "/login" });
+    if (!s || s.role !== "admin") { nav({ to: "/login" }); return; }
+    purgeInactiveUsers().finally(() => setReady(true));
   }, [nav]);
 
   return (
@@ -43,15 +76,19 @@ function Admin() {
           ))}
         </div>
 
-        <div className="mt-6">
-          {tab === "Users" && <UsersTab />}
-          {tab === "Tasks" && <TasksTab />}
-          {tab === "Submissions" && <SubmissionsTab />}
-          {tab === "Businesses" && <BusinessesTab />}
-          {tab === "Campaigns" && <CampaignsTab />}
-          {tab === "Withdrawals" && <WithdrawalsTab />}
-          {tab === "Settings" && <SettingsTab />}
-        </div>
+        {ready ? (
+          <div className="mt-6">
+            {tab === "Users" && <UsersTab />}
+            {tab === "Tasks" && <TasksTab />}
+            {tab === "Submissions" && <SubmissionsTab />}
+            {tab === "Businesses" && <BusinessesTab />}
+            {tab === "Campaigns" && <CampaignsTab />}
+            {tab === "Withdrawals" && <WithdrawalsTab />}
+            {tab === "Settings" && <SettingsTab />}
+          </div>
+        ) : (
+          <div className="mt-6 p-10 text-center text-muted-foreground">Preparing panel…</div>
+        )}
       </div>
     </div>
   );
@@ -147,7 +184,7 @@ function AddMoneyBtn({ user, onDone }: any) {
 function TasksTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [type, setType] = useState<"free" | "paid">("free");
-  const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" });
+  const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" });
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -157,13 +194,14 @@ function TasksTab() {
   async function add() {
     const active = rows.filter((r) => r.type === type).length;
     if (active >= 25) { toast.error(`Max 25 ${type} tasks reached. Delete one first.`); return; }
-    const { error } = await supabase.from("tasks").insert({
-      type, name: f.name, image_url: f.image_url,
-      required_views: Number(f.required_views), payout: Number(f.payout),
-      unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
-    });
-    if (error) toast.error(error.message);
-    else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" }); load(); }
+      const { error } = await supabase.from("tasks").insert({
+        type, name: f.name, image_url: f.image_url,
+        required_views: Number(f.required_views), payout: Number(f.payout),
+        unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
+        max_takers: Math.max(0, Number(f.max_takers) || 0),
+      });
+      if (error) toast.error(error.message);
+      else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" }); load(); }
   }
 
   async function del(t: any) {
