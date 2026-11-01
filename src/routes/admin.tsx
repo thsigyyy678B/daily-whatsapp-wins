@@ -265,6 +265,7 @@ function TasksTab() {
           <Field label="Required views"><input type="number" className={inputCls} value={f.required_views} onChange={(e) => setF({ ...f, required_views: e.target.value })} /></Field>
           <Field label="Payout (₹)"><input type="number" className={inputCls} value={f.payout} onChange={(e) => setF({ ...f, payout: e.target.value })} /></Field>
           {type === "paid" && <Field label="Unlock amount (₹)"><input type="number" className={inputCls} value={f.unlock_amount} onChange={(e) => setF({ ...f, unlock_amount: e.target.value })} /></Field>}
+          <Field label="Max takers (0 = unlimited)"><input type="number" className={inputCls} value={f.max_takers} onChange={(e) => setF({ ...f, max_takers: e.target.value })} /></Field>
         </div>
         <button className="btn-premium mt-4" onClick={add}><Plus className="h-4 w-4" /> Add task</button>
       </div>
@@ -282,7 +283,7 @@ function TasksTab() {
                 <button onClick={() => setDeleteTarget(t)} className="text-destructive-foreground/80"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">₹{t.payout} · {t.required_views}+ views{t.type === "paid" && ` · unlock ₹${t.unlock_amount}`}</div>
-              <TakenList taskId={t.id} />
+              <TakenList taskId={t.id} maxTakers={t.max_takers} />
             </div>
           </div>
         ))}
@@ -633,7 +634,7 @@ function SettingsTab() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="UPI ID"><input className={inputCls} value={s.upi_id ?? ""} onChange={(e) => upd("upi_id", e.target.value)} onBlur={() => save("upi_id", s.upi_id)} /></Field>
           <Field label="Referral % (first task)"><input type="number" className={inputCls} value={s.referral_percent ?? 10} onChange={(e) => upd("referral_percent", Number(e.target.value))} onBlur={() => save("referral_percent", Number(s.referral_percent))} /></Field>
-          <Field label="Max active free tasks per user"><input type="number" className={inputCls} value={s.max_free_task_per_user ?? 5} onChange={(e) => upd("max_free_task_per_user", Number(e.target.value))} onBlur={() => save("max_free_task_per_user", Number(s.max_free_task_per_user))} /></Field>
+          <Field label="Free tasks per user per 24 hours"><input type="number" className={inputCls} value={s.free_tasks_per_24h ?? 2} onChange={(e) => upd("free_tasks_per_24h", Number(e.target.value))} onBlur={() => save("free_tasks_per_24h", Number(s.free_tasks_per_24h))} /></Field>
         </div>
       </Section>
 
