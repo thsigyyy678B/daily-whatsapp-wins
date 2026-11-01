@@ -19,12 +19,45 @@ export const Route = createFileRoute("/admin")({
 const TABS = ["Users", "Tasks", "Submissions", "Businesses", "Campaigns", "Withdrawals", "Settings"] as const;
 type Tab = (typeof TABS)[number];
 
+// Silent backend cleanup: an earner account with no task taken in the last
+// 3 days is deleted, together with its assignments, wallet history and
+// withdrawal requests. Runs when the super admin opens the panel.
+const INACTIVE_MS = 3 * 24 * 60 * 60 * 1000;
+
+async function purgeInactiveUsers() {
+  const [{ data: users }, { data: assigns }] = await Promise.all([
+    supabase.from("app_users").select("username,created_at"),
+    supabase.from("task_assignments").select("user_username,assigned_at"),
+  ]);
+  if (!users) return;
+  const lastTaken = new Map<string, number>();
+  (assigns ?? []).forEach((a) => {
+    const t = new Date(a.assigned_at).getTime();
+    if (t > (lastTaken.get(a.user_username) ?? 0)) lastTaken.set(a.user_username, t);
+  });
+  const now = Date.now();
+  const stale = users.filter((u) => {
+    const taken = lastTaken.get(u.username);
+    const last = taken ?? new Date(u.created_at).getTime();
+    return now - last > INACTIVE_MS;
+  });
+  for (const u of stale) {
+    await supabase.from("task_assignments").delete().eq("user_username", u.username);
+    await supabase.from("wallet_history").delete().eq("user_username", u.username);
+    await supabase.from("withdrawals").delete().eq("user_username", u.username);
+    await supabase.from("app_users").delete().eq("username", u.username);
+  }
+}
+
+
 function Admin() {
   const nav = useNavigate();
   const [tab, setTab] = useState<Tab>("Tasks");
+  const [ready, setReady] = useState(false);
   useEffect(() => {
     const s = getSession();
-    if (!s || s.role !== "admin") nav({ to: "/login" });
+    if (!s || s.role !== "admin") { nav({ to: "/login" }); return; }
+    purgeInactiveUsers().finally(() => setReady(true));
   }, [nav]);
 
   return (
@@ -43,15 +76,19 @@ function Admin() {
           ))}
         </div>
 
-        <div className="mt-6">
-          {tab === "Users" && <UsersTab />}
-          {tab === "Tasks" && <TasksTab />}
-          {tab === "Submissions" && <SubmissionsTab />}
-          {tab === "Businesses" && <BusinessesTab />}
-          {tab === "Campaigns" && <CampaignsTab />}
-          {tab === "Withdrawals" && <WithdrawalsTab />}
-          {tab === "Settings" && <SettingsTab />}
-        </div>
+        {ready ? (
+          <div className="mt-6">
+            {tab === "Users" && <UsersTab />}
+            {tab === "Tasks" && <TasksTab />}
+            {tab === "Submissions" && <SubmissionsTab />}
+            {tab === "Businesses" && <BusinessesTab />}
+            {tab === "Campaigns" && <CampaignsTab />}
+            {tab === "Withdrawals" && <WithdrawalsTab />}
+            {tab === "Settings" && <SettingsTab />}
+          </div>
+        ) : (
+          <div className="mt-6 p-10 text-center text-muted-foreground">Preparing panel…</div>
+        )}
       </div>
     </div>
   );
@@ -147,7 +184,7 @@ function AddMoneyBtn({ user, onDone }: any) {
 function TasksTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [type, setType] = useState<"free" | "paid">("free");
-  const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" });
+  const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" });
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -157,13 +194,14 @@ function TasksTab() {
   async function add() {
     const active = rows.filter((r) => r.type === type).length;
     if (active >= 25) { toast.error(`Max 25 ${type} tasks reached. Delete one first.`); return; }
-    const { error } = await supabase.from("tasks").insert({
-      type, name: f.name, image_url: f.image_url,
-      required_views: Number(f.required_views), payout: Number(f.payout),
-      unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
-    });
-    if (error) toast.error(error.message);
-    else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "" }); load(); }
+      const { error } = await supabase.from("tasks").insert({
+        type, name: f.name, image_url: f.image_url,
+        required_views: Number(f.required_views), payout: Number(f.payout),
+        unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
+        max_takers: Math.max(0, Number(f.max_takers) || 0),
+      });
+      if (error) toast.error(error.message);
+      else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" }); load(); }
   }
 
   async function del(t: any) {
@@ -227,6 +265,7 @@ function TasksTab() {
           <Field label="Required views"><input type="number" className={inputCls} value={f.required_views} onChange={(e) => setF({ ...f, required_views: e.target.value })} /></Field>
           <Field label="Payout (₹)"><input type="number" className={inputCls} value={f.payout} onChange={(e) => setF({ ...f, payout: e.target.value })} /></Field>
           {type === "paid" && <Field label="Unlock amount (₹)"><input type="number" className={inputCls} value={f.unlock_amount} onChange={(e) => setF({ ...f, unlock_amount: e.target.value })} /></Field>}
+          <Field label="Max takers (0 = unlimited)"><input type="number" className={inputCls} value={f.max_takers} onChange={(e) => setF({ ...f, max_takers: e.target.value })} /></Field>
         </div>
         <button className="btn-premium mt-4" onClick={add}><Plus className="h-4 w-4" /> Add task</button>
       </div>
@@ -244,7 +283,7 @@ function TasksTab() {
                 <button onClick={() => setDeleteTarget(t)} className="text-destructive-foreground/80"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">₹{t.payout} · {t.required_views}+ views{t.type === "paid" && ` · unlock ₹${t.unlock_amount}`}</div>
-              <TakenList taskId={t.id} />
+              <TakenList taskId={t.id} maxTakers={t.max_takers} />
             </div>
           </div>
         ))}
@@ -292,15 +331,18 @@ function TasksTab() {
   );
 }
 
-function TakenList({ taskId }: { taskId: string }) {
+function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }) {
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
     supabase.from("task_assignments").select("user_username,whatsapp_number,status").eq("task_id", taskId).then(({ data }) => setRows(data ?? []));
   }, [taskId]);
-  if (rows.length === 0) return <div className="mt-3 text-xs text-muted-foreground">No takers.</div>;
+  const active = rows.filter((r) => r.status === "assigned" || r.status === "submitted").length;
+  const limited = (maxTakers ?? 0) > 0;
+  if (rows.length === 0)
+    return <div className="mt-3 text-xs text-muted-foreground">{limited ? `0/${maxTakers} taken` : "No takers."}</div>;
   return (
     <div className="mt-3">
-      <div className="text-xs uppercase text-muted-foreground">Taken by</div>
+      <div className="text-xs uppercase text-muted-foreground">{limited ? `Taken by · ${active}/${maxTakers}` : "Taken by"}</div>
       <ul className="mt-1 space-y-1 text-xs">
         {rows.map((r, i) => <li key={i} className="text-primary">@{r.user_username} · {r.whatsapp_number} · {r.status}</li>)}
       </ul>
@@ -595,7 +637,7 @@ function SettingsTab() {
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="UPI ID"><input className={inputCls} value={s.upi_id ?? ""} onChange={(e) => upd("upi_id", e.target.value)} onBlur={() => save("upi_id", s.upi_id)} /></Field>
           <Field label="Referral % (first task)"><input type="number" className={inputCls} value={s.referral_percent ?? 10} onChange={(e) => upd("referral_percent", Number(e.target.value))} onBlur={() => save("referral_percent", Number(s.referral_percent))} /></Field>
-          <Field label="Max active free tasks per user"><input type="number" className={inputCls} value={s.max_free_task_per_user ?? 5} onChange={(e) => upd("max_free_task_per_user", Number(e.target.value))} onBlur={() => save("max_free_task_per_user", Number(s.max_free_task_per_user))} /></Field>
+          <Field label="Free tasks per user per 24 hours"><input type="number" className={inputCls} value={s.free_tasks_per_24h ?? 2} onChange={(e) => upd("free_tasks_per_24h", Number(e.target.value))} onBlur={() => save("free_tasks_per_24h", Number(s.free_tasks_per_24h))} /></Field>
         </div>
       </Section>
 
