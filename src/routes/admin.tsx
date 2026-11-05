@@ -8,7 +8,13 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { Plus, Trash2 } from "lucide-react";
-import { MAX_BUSINESSES, MAX_USERS, countRows } from "@/lib/limits";
+import {
+  BUSINESS_COUNT_CHANGED_EVENT,
+  calculateBusinessMonthlyDue,
+  MAX_BUSINESSES,
+  MAX_USERS,
+  countRows,
+} from "@/lib/limits";
 
 
 export const Route = createFileRoute("/admin")({
@@ -90,15 +96,47 @@ function Admin() {
           <div className="mt-6 p-10 text-center text-muted-foreground">Preparing panel…</div>
         )}
       </div>
+      <BusinessDueBox />
     </div>
+  );
+}
+
+function BusinessDueBox() {
+  const [businessCount, setBusinessCount] = useState(0);
+
+  const refresh = useCallback(() => {
+    countRows("businesses").then(setBusinessCount);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const interval = window.setInterval(refresh, 30_000);
+    window.addEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
+    };
+  }, [refresh]);
+
+  return (
+    <aside className="glass fixed bottom-5 right-5 z-40 w-56 rounded-2xl border border-primary/30 p-4 shadow-lg" aria-live="polite">
+      <div className="text-xs font-semibold uppercase tracking-widest text-primary">Business due</div>
+      <div className="mt-1 font-display text-2xl font-bold">₹{calculateBusinessMonthlyDue(businessCount).toLocaleString("en-IN")}</div>
+      <p className="mt-1 text-xs text-muted-foreground">Amount to be paid at month end</p>
+    </aside>
   );
 }
 
 function CapacityBar() {
   const [c, setC] = useState({ users: 0, biz: 0 });
-  useEffect(() => {
+  const refresh = useCallback(() => {
     Promise.all([countRows("app_users"), countRows("businesses")]).then(([users, biz]) => setC({ users, biz }));
   }, []);
+  useEffect(() => {
+    refresh();
+    window.addEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
+  }, [refresh]);
   const items = [
     { label: "Earner signups", used: c.users, max: MAX_USERS },
     { label: "Business signups", used: c.biz, max: MAX_BUSINESSES },
@@ -436,23 +474,64 @@ function RejectBtn({ onReject, isPaid }: { onReject: (r: string) => void; isPaid
 
 function BusinessesTab() {
   const [rows, setRows] = useState<any[]>([]);
-  useEffect(() => { supabase.from("businesses").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? [])); }, []);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const load = useCallback(() => {
+    supabase.from("businesses").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  async function deleteBusiness(business: any) {
+    if (deleting) return;
+    setDeleting(true);
+    const { data, error } = await supabase
+      .from("businesses")
+      .delete()
+      .eq("username", business.username)
+      .select("username");
+    setDeleting(false);
+
+    if (error) {
+      toast.error(`Business deletion failed: ${error.message}`);
+      return;
+    }
+    if (!data?.length) {
+      toast.error("No business account was deleted. Refresh and try again.");
+      load();
+      return;
+    }
+
+    toast.success("Business account deleted");
+    setDeleteTarget(null);
+    load();
+    window.dispatchEvent(new Event(BUSINESS_COUNT_CHANGED_EVENT));
+  }
+
   return (
     <div className="glass overflow-x-auto rounded-3xl p-4">
       <table className="w-full text-sm">
         <thead className="text-xs uppercase text-muted-foreground">
-          <tr><th className="p-3 text-left">Username</th><th className="text-left">Name</th><th className="text-left">Phone</th><th className="text-left">Category</th><th>Joined</th></tr>
+          <tr><th className="p-3 text-left">Username</th><th className="text-left">Name</th><th className="text-left">Phone</th><th className="text-left">Category</th><th>Joined</th><th></th></tr>
         </thead>
         <tbody>
           {rows.map((b) => (
             <tr key={b.username} className="border-t border-border/50">
               <td className="p-3 font-mono text-primary">{b.username}</td><td>{b.name}</td><td>{b.phone}</td><td>{b.category}</td>
               <td className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleString()}</td>
+              <td className="p-3 text-right"><button onClick={() => setDeleteTarget(b)} className="inline-flex items-center gap-1 rounded-full border border-destructive/50 px-3 py-1.5 text-xs text-destructive-foreground"><Trash2 className="h-3.5 w-3.5" /> Delete</button></td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-muted-foreground">No businesses.</td></tr>}
+          {rows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">No businesses.</td></tr>}
         </tbody>
       </table>
+      {deleteTarget && <ModalAdmin onClose={() => !deleting && setDeleteTarget(null)}>
+        <h3 className="font-display text-lg font-bold">Delete business account?</h3>
+        <p className="mt-2 text-sm text-muted-foreground">This permanently removes @{deleteTarget.username} from the registered businesses.</p>
+        <div className="mt-5 flex justify-end gap-2">
+          <button disabled={deleting} onClick={() => setDeleteTarget(null)} className="rounded-full border border-border px-4 py-2 text-sm disabled:opacity-50">Cancel</button>
+          <button disabled={deleting} onClick={() => deleteBusiness(deleteTarget)} className="rounded-full border border-destructive/50 px-4 py-2 text-sm text-destructive-foreground disabled:opacity-50">{deleting ? "Deleting…" : "Yes, delete"}</button>
+        </div>
+      </ModalAdmin>}
     </div>
   );
 }
