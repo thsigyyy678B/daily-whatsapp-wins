@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+Earner signup-fee totals are captured by a database insert trigger so later account deletion never reverses a recorded fee.

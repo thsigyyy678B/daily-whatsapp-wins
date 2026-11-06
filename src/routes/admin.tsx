@@ -11,6 +11,7 @@ import { Plus, Trash2 } from "lucide-react";
 import {
   BUSINESS_COUNT_CHANGED_EVENT,
   calculateBusinessMonthlyDue,
+  calculateEarnerMonthlyDue,
   MAX_BUSINESSES,
   MAX_USERS,
   countRows,
@@ -73,6 +74,9 @@ function Admin() {
         <div className="glass rounded-3xl p-6">
           <div className="text-xs uppercase tracking-widest text-primary">Super admin</div>
           <h1 className="mt-2 font-display text-3xl font-bold">Control panel</h1>
+        </div>
+
+        <div className="mt-6">
           <CapacityBar />
         </div>
 
@@ -96,18 +100,31 @@ function Admin() {
           <div className="mt-6 p-10 text-center text-muted-foreground">Preparing panel…</div>
         )}
       </div>
-      <BusinessDueBox />
     </div>
   );
 }
 
-function BusinessDueBox() {
-  const [businessCount, setBusinessCount] = useState(0);
-
-  const refresh = useCallback(() => {
-    countRows("businesses").then(setBusinessCount);
+function CapacityBar() {
+  const [c, setC] = useState<{
+    users: number;
+    biz: number;
+    taskCounts: number[] | null;
+    signupFeeTotal: number | null;
+  }>({ users: 0, biz: 0, taskCounts: null, signupFeeTotal: null });
+  const refresh = useCallback(async () => {
+    const [users, biz, userRows, feeTotal] = await Promise.all([
+      countRows("app_users"),
+      countRows("businesses"),
+      supabase.from("app_users").select("tasks_done"),
+      supabase.from("earner_signup_fee_totals").select("total_amount").eq("id", true).maybeSingle(),
+    ]);
+    setC({
+      users,
+      biz,
+      taskCounts: userRows.error ? null : (userRows.data ?? []).map((row) => Number(row.tasks_done ?? 0)),
+      signupFeeTotal: feeTotal.error ? null : Number(feeTotal.data?.total_amount ?? 0),
+    });
   }, []);
-
   useEffect(() => {
     refresh();
     const interval = window.setInterval(refresh, 30_000);
@@ -116,26 +133,6 @@ function BusinessDueBox() {
       window.clearInterval(interval);
       window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
     };
-  }, [refresh]);
-
-  return (
-    <aside className="glass fixed bottom-5 right-5 z-40 w-56 rounded-2xl border border-primary/30 p-4 shadow-lg" aria-live="polite">
-      <div className="text-xs font-semibold uppercase tracking-widest text-primary">Business due</div>
-      <div className="mt-1 font-display text-2xl font-bold">₹{calculateBusinessMonthlyDue(businessCount).toLocaleString("en-IN")}</div>
-      <p className="mt-1 text-xs text-muted-foreground">Amount to be paid at month end</p>
-    </aside>
-  );
-}
-
-function CapacityBar() {
-  const [c, setC] = useState({ users: 0, biz: 0 });
-  const refresh = useCallback(() => {
-    Promise.all([countRows("app_users"), countRows("businesses")]).then(([users, biz]) => setC({ users, biz }));
-  }, []);
-  useEffect(() => {
-    refresh();
-    window.addEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
   }, [refresh]);
   const items = [
     { label: "Earner signups", used: c.users, max: MAX_USERS },
@@ -163,6 +160,34 @@ function CapacityBar() {
           </div>
         );
       })}
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <section className="rounded-2xl border border-primary/25 bg-primary/5 p-4" aria-live="polite">
+          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Earner signup fees</div>
+          <div className="mt-1 font-display text-2xl font-bold">
+            {c.signupFeeTotal === null ? "—" : `₹${c.signupFeeTotal.toLocaleString("en-IN")}`}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {c.signupFeeTotal === null ? "Run the SQL setup to enable tracking" : "Cumulative; account removal does not reduce it"}
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-secondary/40 p-4" aria-live="polite">
+          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Earner month-end due</div>
+          <div className="mt-1 font-display text-2xl font-bold">
+            {c.taskCounts === null ? "—" : `₹${calculateEarnerMonthlyDue(c.taskCounts).toLocaleString("en-IN")}`}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {c.taskCounts === null ? "Could not load current earner totals" : "Amount to be paid at month end"}
+          </p>
+        </section>
+
+        <section className="rounded-2xl border border-border bg-secondary/40 p-4" aria-live="polite">
+          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Business month-end due</div>
+          <div className="mt-1 font-display text-2xl font-bold">₹{calculateBusinessMonthlyDue(c.biz).toLocaleString("en-IN")}</div>
+          <p className="mt-1 text-xs text-muted-foreground">Amount to be paid at month end</p>
+        </section>
+      </div>
     </div>
   );
 }
