@@ -19,7 +19,16 @@ import {
 
 
 export const Route = createFileRoute("/admin")({
-  head: () => ({ meta: [{ title: "Super Admin — Daily WhatsApp Challenge" }, { name: "description", content: "Platform control panel." }] }),
+  head: () => ({
+    meta: [
+      { title: "Super Admin — Daily WhatsApp Challenge" },
+      { name: "description", content: "Manage earner and business capacity, fees, tasks, and platform activity." },
+      { property: "og:title", content: "Super Admin — Daily WhatsApp Challenge" },
+      { property: "og:description", content: "Manage platform capacity and live month-end totals." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
   component: Admin,
 });
 
