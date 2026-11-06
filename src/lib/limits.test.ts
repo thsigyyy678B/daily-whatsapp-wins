@@ -22,14 +22,25 @@ describe("business capacity and monthly due", () => {
     assert.equal(calculateBusinessMonthlyDue(1), 50);
   });
 
-  it("calculates earner month-end due from each current user's completed tasks", () => {
-    assert.equal(calculateEarnerMonthlyDue([0]), 25);
-    assert.equal(calculateEarnerMonthlyDue([2]), 25);
+  it("charges ₹25 for earners with fewer than 3 completed tasks", () => {
+    assert.equal(calculateEarnerMonthlyDue([0, 2]), 50);
+  });
+
+  it("charges ₹35 for earners with 3 or 4 completed tasks", () => {
     assert.equal(calculateEarnerMonthlyDue([3]), 35);
     assert.equal(calculateEarnerMonthlyDue([4]), 35);
+  });
+
+  it("charges ₹45 for earners with 5 through 10 completed tasks", () => {
     assert.equal(calculateEarnerMonthlyDue([5]), 45);
     assert.equal(calculateEarnerMonthlyDue([10]), 45);
+  });
+
+  it("charges ₹50 for earners with more than 10 completed tasks", () => {
     assert.equal(calculateEarnerMonthlyDue([11]), 50);
+  });
+
+  it("adds each current earner's applicable month-end amount", () => {
     assert.equal(calculateEarnerMonthlyDue([2, 3, 5, 10, 11]), 200);
   });
 });
