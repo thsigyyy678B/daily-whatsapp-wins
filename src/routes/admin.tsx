@@ -110,19 +110,21 @@ function CapacityBar() {
     biz: number;
     taskCounts: number[] | null;
     signupFeeTotal: number | null;
-  }>({ users: 0, biz: 0, taskCounts: null, signupFeeTotal: null });
+    signupFeePerEarner: number | null;
+  }>({ users: 0, biz: 0, taskCounts: null, signupFeeTotal: null, signupFeePerEarner: null });
   const refresh = useCallback(async () => {
     const [users, biz, userRows, feeTotal] = await Promise.all([
       countRows("app_users"),
       countRows("businesses"),
       supabase.from("app_users").select("tasks_done"),
-      supabase.from("earner_signup_fee_totals").select("total_amount").eq("id", true).maybeSingle(),
+      supabase.from("earner_signup_fee_totals").select("total_amount,signup_fee").eq("id", true).maybeSingle(),
     ]);
     setC({
       users,
       biz,
       taskCounts: userRows.error ? null : (userRows.data ?? []).map((row) => Number(row.tasks_done ?? 0)),
       signupFeeTotal: feeTotal.error ? null : Number(feeTotal.data?.total_amount ?? 0),
+      signupFeePerEarner: feeTotal.error ? null : Number(feeTotal.data?.signup_fee ?? 10),
     });
   }, []);
   useEffect(() => {
@@ -168,7 +170,9 @@ function CapacityBar() {
             {c.signupFeeTotal === null ? "—" : `₹${c.signupFeeTotal.toLocaleString("en-IN")}`}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {c.signupFeeTotal === null ? "Run the SQL setup to enable tracking" : "Cumulative; account removal does not reduce it"}
+            {c.signupFeeTotal === null || c.signupFeePerEarner === null
+              ? "Run the SQL setup to enable tracking"
+              : `₹${c.signupFeePerEarner.toLocaleString("en-IN")} per new earner · cumulative total never decreases`}
           </p>
         </section>
 
