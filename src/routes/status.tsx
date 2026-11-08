@@ -30,6 +30,8 @@ type Campaign = {
   views: number;
   package_name: string;
   expected_views: number;
+  commission_sale?: boolean;
+  commission_sale_fee?: number;
   created_at: string;
 };
 
@@ -106,7 +108,7 @@ function StatusPage() {
                 <div key={c.id} className="glass rounded-2xl p-4">
                   <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full rounded-xl object-cover" />
                   <div className="mt-3 flex items-center justify-between">
-                    <div className="text-xs text-muted-foreground">Txn: {c.transaction_id} · ₹{c.amount}</div>
+                    <div className="text-xs text-muted-foreground">Txn: {c.transaction_id} · ₹{c.amount}{c.commission_sale ? ` · Commission Sale ₹${c.commission_sale_fee ?? 0} add-on` : ""}</div>
                     <span className={`rounded-full px-3 py-1 text-xs ${c.status === "rejected" ? "bg-destructive/20 text-destructive-foreground" : "bg-muted"}`}>{c.status}</span>
                   </div>
                   {c.reject_reason && (
@@ -159,6 +161,7 @@ function LiveAdCard({ c }: { c: Campaign }) {
               LIVE
             </span>
             {c.package_name && <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-muted-foreground">{c.package_name}</span>}
+            {c.commission_sale && <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">Commission Sale · ₹{c.commission_sale_fee ?? 0} add-on</span>}
             <span className="text-xs text-muted-foreground">Txn: {c.transaction_id}</span>
           </div>
 

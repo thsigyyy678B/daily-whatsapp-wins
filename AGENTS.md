@@ -10,3 +10,5 @@
 <!-- LOVABLE:END -->
 
 Earner signup-fee totals are captured by a database insert trigger so later account deletion never reverses a recorded fee.
+
+Commission Sale configuration belongs in the existing settings store, package eligibility in business package JSON, and campaign selections in campaign rows so checkout and business status remain consistent.
