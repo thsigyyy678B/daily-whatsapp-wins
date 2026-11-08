@@ -21,6 +21,7 @@ function Business() {
   const [sel, setSel] = useState<any>(null);
   const [upi, setUpi] = useState("");
   const [rejTerms, setRejTerms] = useState("");
+  const [commissionSalePrice, setCommissionSalePrice] = useState(0);
   const [camps, setCamps] = useState<any[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -29,7 +30,7 @@ function Business() {
     if (!s || s.role !== "business") { nav({ to: "/login" }); return; }
     const [{ data: b }, { data: settings }, { data: c }] = await Promise.all([
       supabase.from("businesses").select("*").eq("username", s.username).maybeSingle(),
-      supabase.from("settings").select("key,value").in("key", ["business_packages", "business_package", "upi_id", "rejection_terms_url"]),
+      supabase.from("settings").select("key,value").in("key", ["business_packages", "business_package", "upi_id", "rejection_terms_url", "commission_sale_price"]),
       supabase.from("campaigns").select("*").eq("business_username", s.username).order("created_at", { ascending: false }),
     ]);
     setMe(b);
@@ -38,6 +39,7 @@ function Business() {
     settings?.forEach((r) => {
       if (r.key === "upi_id") setUpi(String(r.value ?? ""));
       if (r.key === "rejection_terms_url") setRejTerms(String(r.value ?? ""));
+      if (r.key === "commission_sale_price") setCommissionSalePrice(Math.max(0, Number(r.value) || 0));
       if (r.key === "business_packages" && Array.isArray(r.value)) list = [...r.value];
       if (r.key === "business_package" && (r.value as any)?.name && list.length === 0) list = [r.value];
     });
@@ -70,6 +72,7 @@ function Business() {
               <div key={i} className="flex flex-col rounded-2xl border border-border bg-black/30 p-5">
                 <h2 className="font-display text-xl font-bold">{p.name}</h2>
                 <div className="text-gradient-emerald mt-1 font-display text-2xl">₹{p.amount}</div>
+                {p.commission_sale_eligible && <div className="mt-2 text-xs font-medium text-primary">Commission Sale add-on available · +₹{commissionSalePrice}</div>}
                 <div className="mt-1 text-xs text-muted-foreground">{p.views}+ views · {p.duration}</div>
                 <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
                 {p.long_url && <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">Full details →</a>}
@@ -92,14 +95,16 @@ function Business() {
                 <div className="text-xs text-muted-foreground">Txn: {c.transaction_id}</div>
                 <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>
               </div>
+              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale add-on · Included in checkout</div>}
               {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
+              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">{c.package_name} · Commission Sale add-on included in checkout</div>}
             </div>
           ))}
           {camps.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">No campaigns yet.</div>}
         </div>
       </div>
 
-      {open && sel?.name && <CampaignModal pkg={sel} upi={upi} rejTerms={rejTerms} me={me} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
+      {open && sel?.name && <CampaignModal pkg={sel} upi={upi} rejTerms={rejTerms} commissionSalePrice={commissionSalePrice} me={me} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
     </div>
   );
 }
@@ -111,14 +116,18 @@ function embed(url: string) {
   return url;
 }
 
-function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
+function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, onDone }: any) {
   const [step, setStep] = useState(1);
   const [image, setImage] = useState("");
   const [txn, setTxn] = useState("");
+  const [commissionSale, setCommissionSale] = useState(false);
+  const addonFee = commissionSale && pkg.commission_sale_eligible ? commissionSalePrice : 0;
+  const totalAmount = (Number(pkg.amount) || 0) + addonFee;
   async function submit() {
     const { error } = await supabase.from("campaigns").insert({
-      business_username: me.username, image_url: image, transaction_id: txn, amount: pkg.amount,
+      business_username: me.username, image_url: image, transaction_id: txn, amount: totalAmount,
       package_name: pkg.name ?? "", expected_views: Number(pkg.views) || 0,
+      commission_sale: commissionSale && Boolean(pkg.commission_sale_eligible), commission_sale_fee: addonFee,
     });
     if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
   }
@@ -136,6 +145,12 @@ function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
             <div className="mt-4">
               <Field label="Google Drive image URL"><input className={inputCls} value={image} onChange={(e) => setImage(e.target.value)} /></Field>
             </div>
+            {pkg.commission_sale_eligible && (
+              <label className="mt-4 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
+                <input type="checkbox" checked={commissionSale} onChange={(e) => setCommissionSale(e.target.checked)} className="mt-1" />
+                <span><b>Commission Sale</b><span className="mt-1 block text-xs text-muted-foreground">Add the product-sale option for ₹{commissionSalePrice}. Product commissions are arranged directly with sellers.</span></span>
+              </label>
+            )}
             <div className="mt-4 flex justify-end"><button className="btn-premium" disabled={!image} onClick={() => setStep(2)}>Next</button></div>
           </>
         )}
@@ -153,9 +168,10 @@ function CampaignModal({ pkg, upi, rejTerms, me, onClose, onDone }: any) {
         )}
         {step === 3 && (
           <>
-            <h3 className="font-display text-xl font-bold">Pay ₹{pkg.amount}</h3>
+            <h3 className="font-display text-xl font-bold">Pay ₹{totalAmount}</h3>
+            <div className="mt-2 text-xs text-muted-foreground">{pkg.name}: ₹{pkg.amount}{addonFee > 0 ? ` + Commission Sale: ₹${addonFee}` : ""}</div>
             <div className="mt-4 rounded-xl bg-background/50 p-4 text-center">
-              <img alt="qr" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`upi://pay?pa=${upi}&am=${pkg.amount}&cu=INR&tn=${pkg.name}`)}`} />
+              <img alt="qr" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`upi://pay?pa=${upi}&am=${totalAmount}&cu=INR&tn=${pkg.name}${addonFee > 0 ? " Commission Sale" : ""}`)}`} />
               <div className="mt-2 text-xs text-muted-foreground">UPI: {upi}</div>
             </div>
             <div className="mt-4"><Field label="Transaction ID"><input className={inputCls} value={txn} onChange={(e) => setTxn(e.target.value)} /></Field></div>

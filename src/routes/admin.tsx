@@ -635,6 +635,7 @@ function CampaignsTab() {
             <div className="text-xs uppercase text-primary">@{c.business_username}</div>
             <div className="text-sm">₹{c.amount} · Txn: {c.transaction_id}</div>
             <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}{c.package_name ? ` · ${c.package_name}` : ""} · Views: {c.views ?? 0}</div>
+            {c.commission_sale && <div className="mt-2 text-xs text-primary">Commission Sale add-on · Included in ₹{c.amount} total</div>}
             {c.status === "approved" && (
               <div className="mt-2 flex items-center gap-2">
                 <input type="number" min={0} placeholder="New views" value={viewsDraft[c.id] ?? ""} onChange={(e) => setViewsDraft({ ...viewsDraft, [c.id]: e.target.value })} className={`${inputCls} w-32 py-1.5 text-xs`} />
@@ -721,7 +722,7 @@ function WithdrawalsTab() {
   );
 }
 
-type Pkg = { name?: string; amount?: number; views?: number; duration?: string; short?: string; long_url?: string };
+type Pkg = { name?: string; amount?: number; views?: number; duration?: string; short?: string; long_url?: string; commission_sale_eligible?: boolean };
 const emptyPkg = (): Pkg => ({ name: "", amount: 0, views: 0, duration: "", short: "", long_url: "" });
 
 function SettingsTab() {
@@ -803,6 +804,10 @@ function SettingsTab() {
                 <Field label="Amount (₹)"><input type="number" className={inputCls} value={p.amount ?? 0} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, amount: Number(e.target.value) }; setPkgs(n); }} /></Field>
                 <Field label="Expected reach (views)"><input type="number" className={inputCls} value={p.views ?? 0} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, views: Number(e.target.value) }; setPkgs(n); }} /></Field>
                 <Field label="Campaign duration"><input className={inputCls} value={p.duration ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, duration: e.target.value }; setPkgs(n); }} /></Field>
+                <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <input type="checkbox" checked={p.commission_sale_eligible ?? false} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, commission_sale_eligible: e.target.checked }; setPkgs(n); }} />
+                  Allow Commission Sale add-on
+                </label>
                 <div className="sm:col-span-2"><Field label="Short description (≤100 chars)"><input maxLength={100} className={inputCls} value={p.short ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, short: e.target.value }; setPkgs(n); }} /></Field></div>
                 <div className="sm:col-span-2"><Field label="Long description Google Docs URL"><input className={inputCls} value={p.long_url ?? ""} onChange={(e) => { const n = [...pkgs]; n[i] = { ...p, long_url: e.target.value }; setPkgs(n); }} /></Field></div>
               </div>
@@ -811,6 +816,16 @@ function SettingsTab() {
           ))}
         </div>
         <p className="mt-3 text-xs text-muted-foreground">Fill at least the package name to make a package visible to businesses. Each Save button saves all 3 slots.</p>
+      </Section>
+
+      <Section title="Commission Sale add-on">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <Field label="Add-on price (₹)">
+            <input type="number" min={0} className={inputCls} value={s.commission_sale_price ?? 0} onChange={(e) => upd("commission_sale_price", Math.max(0, Number(e.target.value) || 0))} />
+          </Field>
+          <button className="btn-premium" onClick={() => save("commission_sale_price", Math.max(0, Number(s.commission_sale_price) || 0))}>Save add-on price</button>
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">Businesses can add Commission Sale only to packages marked above.</p>
       </Section>
     </div>
   );

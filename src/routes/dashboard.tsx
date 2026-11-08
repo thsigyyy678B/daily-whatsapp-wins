@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
-import { Download, Eye, Lock, Wallet } from "lucide-react";
+import { Download, Eye, Lock, MessageCircle, Wallet } from "lucide-react";
 import { DriveMedia } from "@/components/drive-media";
 import { driveToDownload } from "@/lib/supabase";
 
@@ -26,6 +26,7 @@ function Dashboard() {
   const [maxFree, setMaxFree] = useState(2);
   const [upi, setUpi] = useState("");
   const [takers, setTakers] = useState<Record<string, number>>({});
+  const [saleOffers, setSaleOffers] = useState<any[]>([]);
 
   const load = useCallback(async () => {
     const s = getSession();
@@ -40,6 +41,26 @@ function Dashboard() {
     setMe(u);
     setTasks((t ?? []) as Task[]);
     setMine((a ?? []) as Assign[]);
+    const { data: offers } = await supabase
+      .from("campaigns")
+      .select("id,business_username,image_url,package_name,created_at")
+      .eq("status", "approved")
+      .eq("commission_sale", true)
+      .order("created_at", { ascending: false });
+    const offerRows = offers ?? [];
+    if (offerRows.length > 0) {
+      const usernames = [...new Set(offerRows.map((offer) => offer.business_username))];
+      const { data: businesses } = await supabase
+        .from("businesses")
+        .select("username,name,phone")
+        .in("username", usernames);
+      const businessByUsername = new Map((businesses ?? []).map((business) => [business.username, business]));
+      setSaleOffers(offerRows
+        .map((offer) => ({ ...offer, business: businessByUsername.get(offer.business_username) }))
+        .filter((offer) => offer.business));
+    } else {
+      setSaleOffers([]);
+    }
     const counts: Record<string, number> = {};
     ((allA ?? []) as any[]).forEach((x) => {
       if (x.status === "assigned" || x.status === "submitted") counts[x.task_id] = (counts[x.task_id] ?? 0) + 1;
@@ -76,6 +97,34 @@ function Dashboard() {
           </div>
           <span className="btn-premium text-sm">Open wallet</span>
         </Link>
+
+        {saleOffers.length > 0 && (
+          <>
+            <SectionTitle title="Commission Sale offers" subtitle="Contact businesses directly to arrange product sales and commission" />
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              {saleOffers.map((offer) => {
+                const phone = String(offer.business.phone ?? "").replace(/\D/g, "");
+                const message = encodeURIComponent(`Hi ${offer.business.name}, I am interested in your ${offer.package_name || "product"} Commission Sale offer. My WhatsApp number is ${me.phone}. Please contact me with the product and commission details.`);
+                return (
+                  <div key={offer.id} className="glass overflow-hidden rounded-3xl">
+                    <DriveMedia url={offer.image_url} alt={`${offer.business.name} product offer`} className="aspect-square w-full object-cover" />
+                    <div className="p-4">
+                      <div className="text-xs uppercase text-primary">{offer.business.name}</div>
+                      <div className="mt-1 font-semibold">{offer.package_name || "Commission Sale"}</div>
+                      <p className="mt-2 text-xs text-muted-foreground">Commission terms are arranged directly with the business.</p>
+                      {phone && (
+                        <a className="btn-premium mt-4 w-full text-sm" href={`https://wa.me/${phone}?text=${message}`} target="_blank" rel="noreferrer">
+                          <MessageCircle className="h-4 w-4" /> Contact on WhatsApp
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
 
         {/* Sponsored */}
         <SectionTitle title="Sponsored tasks" subtitle="Higher payout · Unlock to take" />
