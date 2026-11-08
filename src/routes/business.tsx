@@ -72,6 +72,7 @@ function Business() {
               <div key={i} className="flex flex-col rounded-2xl border border-border bg-black/30 p-5">
                 <h2 className="font-display text-xl font-bold">{p.name}</h2>
                 <div className="text-gradient-emerald mt-1 font-display text-2xl">₹{p.amount}</div>
+                {p.commission_sale_eligible && <div className="mt-2 text-xs font-medium text-primary">Commission Sale add-on available · +₹{commissionSalePrice}</div>}
                 <div className="mt-1 text-xs text-muted-foreground">{p.views}+ views · {p.duration}</div>
                 <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
                 {p.long_url && <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">Full details →</a>}
