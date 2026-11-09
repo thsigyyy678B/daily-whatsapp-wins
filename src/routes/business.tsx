@@ -1,3 +1,4 @@
+
 import { createPortal } from "react-dom";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
@@ -28,15 +29,22 @@ function Business() {
 
   const load = useCallback(async () => {
     const s = getSession();
-    if (!s || s.role !== "business") { nav({ to: "/login" }); return; }
+    if (!s || s.role !== "business") {
+      nav({ to: "/login" });
+      return;
+    }
+
     const [{ data: b }, { data: settings }, { data: c }] = await Promise.all([
       supabase.from("businesses").select("*").eq("username", s.username).maybeSingle(),
       supabase.from("settings").select("key,value").in("key", ["business_packages", "business_package", "upi_id", "rejection_terms_url", "commission_sale_price"]),
       supabase.from("campaigns").select("*").eq("business_username", s.username).order("created_at", { ascending: false }),
     ]);
+
     setMe(b);
     setCamps(c ?? []);
+
     let list: any[] = [];
+
     settings?.forEach((r) => {
       if (r.key === "upi_id") setUpi(String(r.value ?? ""));
       if (r.key === "rejection_terms_url") setRejTerms(String(r.value ?? ""));
@@ -44,67 +52,145 @@ function Business() {
       if (r.key === "business_packages" && Array.isArray(r.value)) list = [...r.value];
       if (r.key === "business_package" && (r.value as any)?.name && list.length === 0) list = [r.value];
     });
+
     while (list.length < 3) list.push({});
     setPkgs(list.slice(0, 3));
   }, [nav]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   if (!me) return <div className="min-h-screen"><SiteHeader /><div className="p-10 text-center text-muted-foreground">Loading…</div></div>;
 
   return (
     <div className="min-h-screen">
       <SiteHeader />
+
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="glass rounded-3xl p-6">
           <div className="text-xs uppercase tracking-widest text-primary">Business account</div>
+
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <h1 className="font-display text-3xl font-bold">{me.name}</h1>
-            <Link to="/status" className="btn-soft"><BarChart3 className="h-4 w-4" /> Status page</Link>
+            <Link to="/status" className="btn-soft">
+              <BarChart3 className="h-4 w-4" /> Status page
+            </Link>
           </div>
-          <div className="mt-1 text-sm text-muted-foreground">@{me.username} · {me.category}</div>
+
+          <div className="mt-1 text-sm text-muted-foreground">
+            @{me.username} · {me.category}
+          </div>
         </div>
 
-        {/* Packages */}
         <div className="mt-6 glass glow-emerald rounded-3xl p-8">
           <div className="text-xs uppercase tracking-widest text-primary">Available packages</div>
+
           <div className="mt-4 grid gap-4 md:grid-cols-3">
             {pkgs.filter((p) => p?.name).map((p, i) => (
               <div key={i} className="flex flex-col rounded-2xl border border-border bg-black/30 p-5">
                 <h2 className="font-display text-xl font-bold">{p.name}</h2>
-                <div className="text-gradient-emerald mt-1 font-display text-2xl">₹{p.amount}</div>
-                {p.commission_sale_eligible && <div className="mt-2 text-xs font-medium text-primary">Commission Sale add-on available · +₹{commissionSalePrice}</div>}
-                <div className="mt-1 text-xs text-muted-foreground">{p.views}+ views · {p.duration}</div>
+
+                <div className="text-gradient-emerald mt-1 font-display text-2xl">
+                  ₹{p.amount}
+                </div>
+
+                {p.commission_sale_eligible && (
+                  <div className="mt-2 text-xs font-medium text-primary">
+                    Commission Sale add-on available · +₹{commissionSalePrice}
+                  </div>
+                )}
+
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {p.views}+ views · {p.duration}
+                </div>
+
                 <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
-                {p.long_url && <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">Full details →</a>}
-                <button onClick={() => { setSel(p); setOpen(true); }} className="btn-premium mt-4"><Rocket className="h-4 w-4" /> Create campaign</button>
+
+                {p.long_url && (
+                  <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">
+                    Full details →
+                  </a>
+                )}
+
+                <button onClick={() => { setSel(p); setOpen(true); }} className="btn-premium mt-4">
+                  <Rocket className="h-4 w-4" /> Create campaign
+                </button>
               </div>
             ))}
+
             {pkgs.filter((p) => p?.name).length === 0 && (
-              <p className="text-sm text-muted-foreground md:col-span-3">No packages configured yet — check back soon.</p>
+              <p className="text-sm text-muted-foreground md:col-span-3">
+                No packages configured yet — check back soon.
+              </p>
             )}
           </div>
         </div>
 
-        {/* Campaigns */}
         <h2 className="mt-10 mb-4 font-display text-2xl font-bold">Your campaigns</h2>
+
         <div className="grid gap-4 md:grid-cols-2">
           {camps.map((c) => (
             <div key={c.id} className="glass rounded-2xl p-4">
               <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full rounded-xl object-cover" />
+
               <div className="mt-3 flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">{getCommissionSalePackageName(c.package_name ?? "Campaign")} · ₹{c.amount} · Txn: {c.transaction_id}</div>
-                <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>
+                <div className="text-xs text-muted-foreground">
+                  {getCommissionSalePackageName(c.package_name ?? "Campaign")} · ₹{c.amount} · Txn: {c.transaction_id}
+                </div>
+
+                <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>
+                  {c.status}
+                </span>
               </div>
-              {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale · ₹{getSellerCommission(c.package_name) ?? 0} per product sale · Add-on included in checkout</div>}
-              {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
+
+              {isCommissionSalePackage(c.package_name ?? "") && (
+                <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">
+                  Commission Sale · ₹{getSellerCommission(c.package_name) ?? 0} per product sale · Add-on included in checkout
+                </div>
+              )}
+
+              {c.commission_sale_enabled && (
+                <div className="mt-3 rounded-xl border border-primary/25 bg-primary/5 p-3 text-sm">
+                  <div className="font-semibold">{c.product_name}</div>
+
+                  {c.product_description && (
+                    <p className="mt-1 text-xs text-muted-foreground">{c.product_description}</p>
+                  )}
+
+                  <p className="mt-2 text-xs text-primary">
+                    Promoter commission: ₹{Number(c.seller_commission ?? getSellerCommission(c.package_name ?? "") ?? 0)} per sale
+                  </p>
+                </div>
+              )}
+
+              {c.reject_reason && (
+                <div className="mt-2 text-xs text-destructive-foreground/80">
+                  Reason: {c.reject_reason}
+                </div>
+              )}
             </div>
           ))}
-          {camps.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">No campaigns yet.</div>}
+
+          {camps.length === 0 && (
+            <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">
+              No campaigns yet.
+            </div>
+          )}
         </div>
       </div>
 
-      {open && sel?.name && <CampaignModal pkg={sel} upi={upi} rejTerms={rejTerms} commissionSalePrice={commissionSalePrice} me={me} onClose={() => setOpen(false)} onDone={() => { setOpen(false); load(); }} />}
+      {open && sel?.name && (
+        <CampaignModal
+          pkg={sel}
+          upi={upi}
+          rejTerms={rejTerms}
+          commissionSalePrice={commissionSalePrice}
+          me={me}
+          onClose={() => setOpen(false)}
+          onDone={() => { setOpen(false); load(); }}
+        />
+      )}
     </div>
   );
 }
@@ -122,68 +208,188 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
   const [txn, setTxn] = useState("");
   const [commissionSale, setCommissionSale] = useState(false);
   const [sellerCommission, setSellerCommission] = useState("");
+  const [productName, setProductName] = useState("");
+  const [productDescription, setProductDescription] = useState("");
+
   const addonFee = commissionSale && pkg.commission_sale_eligible ? commissionSalePrice : 0;
-  const totalAmount = getCampaignCheckoutTotal(pkg.amount, addonFee, commissionSale && Boolean(pkg.commission_sale_eligible));
+
+  const totalAmount = getCampaignCheckoutTotal(
+    pkg.amount,
+    addonFee,
+    commissionSale && Boolean(pkg.commission_sale_eligible)
+  );
+
   async function submit() {
     const { error } = await supabase.from("campaigns").insert({
-      business_username: me.username, image_url: image, transaction_id: txn, amount: totalAmount,
-      package_name: buildCommissionSalePackageName(pkg.name ?? "", commissionSale && Boolean(pkg.commission_sale_eligible), Number(sellerCommission)),
+      business_username: me.username,
+      image_url: image,
+      transaction_id: txn,
+      amount: totalAmount,
+
+      package_name: buildCommissionSalePackageName(
+        pkg.name ?? "",
+        commissionSale && Boolean(pkg.commission_sale_eligible),
+        Number(sellerCommission)
+      ),
+
+      commission_sale_enabled: commissionSale && Boolean(pkg.commission_sale_eligible),
+
+      product_name: commissionSale && pkg.commission_sale_eligible ? productName.trim() : null,
+
+      product_description: commissionSale && pkg.commission_sale_eligible ? productDescription.trim() : null,
+
+      seller_commission: commissionSale && pkg.commission_sale_eligible
+        ? Math.max(0, Number(sellerCommission) || 0)
+        : 0,
+
       expected_views: Number(pkg.views) || 0,
     });
-    if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
+
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Submitted for approval");
+      onDone();
+    }
   }
+
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur" onClick={onClose}>
       <div className="glass w-full max-w-lg rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
+
         {step === 1 && (
           <>
             <h3 className="font-display text-xl font-bold">Upload your ad creative</h3>
+
             <ol className="mt-3 list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
               <li>Open Google Drive & upload your image.</li>
               <li>Right-click → Share → Anyone with the link.</li>
               <li>Copy the link and paste below.</li>
             </ol>
+
             <div className="mt-4">
-              <Field label="Google Drive image URL"><input className={inputCls} value={image} onChange={(e) => setImage(e.target.value)} /></Field>
+              <Field label="Google Drive image URL">
+                <input className={inputCls} value={image} onChange={(e) => setImage(e.target.value)} />
+              </Field>
             </div>
+
             {pkg.commission_sale_eligible && (
               <label className="mt-4 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
                 <input type="checkbox" checked={commissionSale} onChange={(e) => setCommissionSale(e.target.checked)} className="mt-1" />
-                <span><b>Commission Sale</b><span className="mt-1 block text-xs text-muted-foreground">Add the product-sale option for ₹{commissionSalePrice}. Product commissions are arranged directly with sellers.</span></span>
+
+                <span>
+                  <b>Commission Sale</b>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Add the product-sale option for ₹{commissionSalePrice}. Product commissions are arranged directly with sellers.
+                  </span>
+                </span>
               </label>
             )}
+
             {commissionSale && pkg.commission_sale_eligible && (
-              <div className="mt-3"><Field label="Seller commission per product sold (₹)"><input type="number" min={0} className={inputCls} value={sellerCommission} onChange={(e) => setSellerCommission(e.target.value)} placeholder="Enter commission per sale" /></Field></div>
+              <div className="mt-3 space-y-3">
+                <Field label="Product name">
+                  <input
+                    className={inputCls}
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Enter product or service name"
+                  />
+                </Field>
+
+                <Field label="Product description">
+                  <textarea
+                    className={inputCls}
+                    rows={3}
+                    value={productDescription}
+                    onChange={(e) => setProductDescription(e.target.value)}
+                    placeholder="Describe the product for promoters"
+                  />
+                </Field>
+
+                <Field label="Seller commission per product sold (₹)">
+                  <input
+                    type="number"
+                    min={1}
+                    className={inputCls}
+                    value={sellerCommission}
+                    onChange={(e) => setSellerCommission(e.target.value)}
+                    placeholder="Enter commission per sale"
+                  />
+                </Field>
+              </div>
             )}
-            <div className="mt-4 flex justify-end"><button className="btn-premium" disabled={!image} onClick={() => setStep(2)}>Next</button></div>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                className="btn-premium"
+                disabled={!image || (commissionSale && pkg.commission_sale_eligible && (!productName.trim() || !(Number(sellerCommission) > 0)))}
+                onClick={() => setStep(2)}
+              >
+                Next
+              </button>
+            </div>
           </>
         )}
+
         {step === 2 && (
           <>
             <h3 className="font-display text-xl font-bold">Rejection terms</h3>
+
             <div className="mt-3 aspect-[4/3] w-full overflow-hidden rounded-xl border border-border">
-              {rejTerms ? <iframe src={embed(rejTerms)} className="h-full w-full" /> : <div className="grid h-full place-items-center text-sm text-muted-foreground">Not configured</div>}
+              {rejTerms ? (
+                <iframe src={embed(rejTerms)} className="h-full w-full" />
+              ) : (
+                <div className="grid h-full place-items-center text-sm text-muted-foreground">
+                  Not configured
+                </div>
+              )}
             </div>
+
             <div className="mt-4 flex justify-between">
               <button className="btn-ghost-emerald" onClick={() => setStep(1)}>Back</button>
               <button className="btn-premium" onClick={() => setStep(3)}>I agree, continue</button>
             </div>
           </>
         )}
+
         {step === 3 && (
           <>
             <h3 className="font-display text-xl font-bold">Pay ₹{totalAmount}</h3>
-            <div className="mt-2 text-xs text-muted-foreground">{pkg.name}: ₹{pkg.amount}{addonFee > 0 ? ` + Commission Sale: ₹${addonFee}` : ""}</div>
+
+            <div className="mt-2 text-xs text-muted-foreground">
+              {pkg.name}: ₹{pkg.amount}
+              {addonFee > 0 ? ` + Commission Sale: ₹${addonFee}` : ""}
+            </div>
+
             <div className="mt-4 rounded-xl bg-background/50 p-4 text-center">
-              <img alt="qr" className="mx-auto h-44 w-44 rounded-lg bg-white p-2" src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`upi://pay?pa=${upi}&am=${totalAmount}&cu=INR&tn=${pkg.name}${addonFee > 0 ? " Commission Sale" : ""}`)}`} />
+              <img
+                alt="qr"
+                className="mx-auto h-44 w-44 rounded-lg bg-white p-2"
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`upi://pay?pa=${upi}&am=${totalAmount}&cu=INR&tn=${pkg.name}${addonFee > 0 ? " Commission Sale" : ""}`)}`}
+              />
+
               <div className="mt-2 text-xs text-muted-foreground">UPI: {upi}</div>
             </div>
-            <div className="mt-4"><Field label="Transaction ID"><input className={inputCls} value={txn} onChange={(e) => setTxn(e.target.value)} /></Field></div>
-            <button disabled={!txn || (commissionSale && !(Number(sellerCommission) > 0))} onClick={submit} className="btn-premium mt-4 w-full">Submit for approval</button>
+
+            <div className="mt-4">
+              <Field label="Transaction ID">
+                <input className={inputCls} value={txn} onChange={(e) => setTxn(e.target.value)} />
+              </Field>
+            </div>
+
+            <button
+              disabled={!txn || (commissionSale && (!(Number(sellerCommission) > 0) || !productName.trim()))}
+              onClick={submit}
+              className="btn-premium mt-4 w-full"
+            >
+              Submit for approval
+            </button>
           </>
         )}
+
       </div>
     </div>,
     document.body,
   );
 }
+
