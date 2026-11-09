@@ -53,8 +53,8 @@ function Business() {
       if (r.key === "business_package" && (r.value as any)?.name && list.length === 0) list = [r.value];
     });
 
-    while (list.length < 3) list.push({});
-    setPkgs(list.slice(0, 3));
+    while (list.length < 6) list.push({});
+    setPkgs(list.slice(0, 6));
   }, [nav]);
 
   useEffect(() => {
@@ -392,4 +392,5 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
     document.body,
   );
 }
+
 
