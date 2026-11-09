@@ -96,7 +96,7 @@ function Business() {
                 <div className="text-xs text-muted-foreground">{getCommissionSalePackageName(c.package_name ?? "Campaign")} · ₹{c.amount} · Txn: {c.transaction_id}</div>
                 <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>
               </div>
-              {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale · Add-on included in checkout</div>}
+              {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale · ₹{getSellerCommission(c.package_name) ?? 0} per product sale · Add-on included in checkout</div>}
               {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
             </div>
           ))}
