@@ -98,7 +98,6 @@ function Business() {
               </div>
               {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale add-on · Included in checkout</div>}
               {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
-              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">{c.package_name} · Commission Sale add-on included in checkout</div>}
             </div>
           ))}
           {camps.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">No campaigns yet.</div>}
