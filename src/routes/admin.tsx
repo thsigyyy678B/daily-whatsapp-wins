@@ -635,7 +635,7 @@ function CampaignsTab() {
           <div className="p-4">
             <div className="text-xs uppercase text-primary">@{c.business_username}</div>
             <div className="text-sm">₹{c.amount} · Txn: {c.transaction_id}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}{c.package_name ? ` · ${c.package_name}` : ""} · Views: {c.views ?? 0}</div>
+            <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}{c.package_name ? ` · ${getCommissionSalePackageName(c.package_name)}` : ""} · Views: {c.views ?? 0}</div>
             {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 text-xs text-primary">Commission Sale add-on · Included in ₹{c.amount} total</div>}
             {c.status === "approved" && (
               <div className="mt-2 flex items-center gap-2">
