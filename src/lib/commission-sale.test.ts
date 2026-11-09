@@ -4,6 +4,7 @@ import {
   buildCommissionSalePackageName,
   getCampaignCheckoutTotal,
   getCommissionSalePackageName,
+  getSellerCommission,
   isCommissionSalePackage,
 } from "./commission-sale.ts";
 
@@ -14,14 +15,15 @@ describe("Commission Sale checkout and campaign marker", () => {
   });
 
   it("marks selected campaigns for seller visibility without changing regular package names", () => {
-    const selected = buildCommissionSalePackageName("Starter", true);
-    assert.equal(selected, "Starter · Commission Sale");
+    const selected = buildCommissionSalePackageName("Starter", true, 125);
+    assert.equal(selected, "Starter · Commission Sale · ₹125/sale");
     assert.equal(isCommissionSalePackage(selected), true);
     assert.equal(getCommissionSalePackageName(selected), "Starter");
+    assert.equal(getSellerCommission(selected), 125);
     assert.equal(buildCommissionSalePackageName("Starter", false), "Starter");
   });
 
   it("avoids duplicating the Commission Sale marker", () => {
-    assert.equal(buildCommissionSalePackageName("Starter · Commission Sale", true), "Starter · Commission Sale");
+    assert.equal(buildCommissionSalePackageName("Starter · Commission Sale · ₹125/sale", true, 125), "Starter · Commission Sale · ₹125/sale");
   });
 });

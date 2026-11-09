@@ -1,18 +1,21 @@
-export const COMMISSION_SALE_PACKAGE_MARKER = " · Commission Sale";
+const COMMISSION_SALE_PATTERN = / · Commission Sale(?: · ₹(\d+(?:\.\d+)?)\/sale)?$/;
 
 export function getCommissionSalePackageName(packageName: string): string {
-  return packageName.endsWith(COMMISSION_SALE_PACKAGE_MARKER)
-    ? packageName.slice(0, -COMMISSION_SALE_PACKAGE_MARKER.length)
-    : packageName;
+  return packageName.replace(COMMISSION_SALE_PATTERN, "");
 }
 
 export function isCommissionSalePackage(packageName: string): boolean {
-  return packageName.endsWith(COMMISSION_SALE_PACKAGE_MARKER);
+  return COMMISSION_SALE_PATTERN.test(packageName);
 }
 
-export function buildCommissionSalePackageName(packageName: string, enabled: boolean): string {
+export function getSellerCommission(packageName: string): number | null {
+  const amount = packageName.match(COMMISSION_SALE_PATTERN)?.[1];
+  return amount ? Number(amount) : null;
+}
+
+export function buildCommissionSalePackageName(packageName: string, enabled: boolean, sellerCommission = 0): string {
   const cleanName = getCommissionSalePackageName(packageName);
-  return enabled ? `${cleanName}${COMMISSION_SALE_PACKAGE_MARKER}` : cleanName;
+  return enabled ? `${cleanName} · Commission Sale · ₹${Math.max(0, Number(sellerCommission) || 0)}/sale` : cleanName;
 }
 
 export function getCampaignCheckoutTotal(packageAmount: number, commissionSaleFee: number, enabled: boolean): number {

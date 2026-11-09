@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { DriveMedia } from "@/components/drive-media";
 import { getSession } from "@/lib/session";
 import { Eye, Flame, Rocket, TrendingUp, XCircle } from "lucide-react";
-import { getCommissionSalePackageName, isCommissionSalePackage } from "@/lib/commission-sale";
+import { getCommissionSalePackageName, getSellerCommission, isCommissionSalePackage } from "@/lib/commission-sale";
 
 export const Route = createFileRoute("/status")({
   head: () => ({
@@ -160,7 +160,7 @@ function LiveAdCard({ c }: { c: Campaign }) {
               LIVE
             </span>
             {c.package_name && <span className="rounded-full bg-white/5 px-3 py-1 text-xs text-muted-foreground">{getCommissionSalePackageName(c.package_name)}</span>}
-            {isCommissionSalePackage(c.package_name ?? "") && <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">Commission Sale add-on</span>}
+            {isCommissionSalePackage(c.package_name ?? "") && <span className="rounded-full bg-primary/15 px-3 py-1 text-xs font-semibold text-primary">Commission Sale · ₹{getSellerCommission(c.package_name) ?? 0}/sale</span>}
             <span className="text-xs text-muted-foreground">Txn: {c.transaction_id}</span>
           </div>
 
