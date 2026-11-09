@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { BarChart3, Rocket } from "lucide-react";
+import { buildCommissionSalePackageName, getCampaignCheckoutTotal, isCommissionSalePackage } from "@/lib/commission-sale";
 
 export const Route = createFileRoute("/business")({
   head: () => ({ meta: [{ title: "Business — Daily WhatsApp Challenge" }, { name: "description", content: "Run status ad campaigns." }] }),
@@ -95,7 +96,7 @@ function Business() {
                 <div className="text-xs text-muted-foreground">Txn: {c.transaction_id}</div>
                 <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>
               </div>
-              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale add-on · Included in checkout</div>}
+              {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale add-on · Included in checkout</div>}
               {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
               {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">{c.package_name} · Commission Sale add-on included in checkout</div>}
             </div>
@@ -122,12 +123,12 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
   const [txn, setTxn] = useState("");
   const [commissionSale, setCommissionSale] = useState(false);
   const addonFee = commissionSale && pkg.commission_sale_eligible ? commissionSalePrice : 0;
-  const totalAmount = (Number(pkg.amount) || 0) + addonFee;
+  const totalAmount = getCampaignCheckoutTotal(pkg.amount, addonFee, commissionSale && Boolean(pkg.commission_sale_eligible));
   async function submit() {
     const { error } = await supabase.from("campaigns").insert({
       business_username: me.username, image_url: image, transaction_id: txn, amount: totalAmount,
-      package_name: pkg.name ?? "", expected_views: Number(pkg.views) || 0,
-      commission_sale: commissionSale && Boolean(pkg.commission_sale_eligible), commission_sale_fee: addonFee,
+      package_name: buildCommissionSalePackageName(pkg.name ?? "", commissionSale && Boolean(pkg.commission_sale_eligible)),
+      expected_views: Number(pkg.views) || 0,
     });
     if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
   }
