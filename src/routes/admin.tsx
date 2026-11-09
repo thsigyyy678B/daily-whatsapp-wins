@@ -114,6 +114,7 @@ function Admin() {
   );
 }
 
+
 function CapacityBar() {
   const [c, setC] = useState<{
     users: number;
@@ -271,14 +272,14 @@ function TasksTab() {
   async function add() {
     const active = rows.filter((r) => r.type === type).length;
     if (active >= 25) { toast.error(`Max 25 ${type} tasks reached. Delete one first.`); return; }
-      const { error } = await supabase.from("tasks").insert({
-        type, name: f.name, image_url: f.image_url,
-        required_views: Number(f.required_views), payout: Number(f.payout),
-        unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
-        max_takers: Math.max(0, Number(f.max_takers) || 0),
-      });
-      if (error) toast.error(error.message);
-      else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" }); load(); }
+    const { error } = await supabase.from("tasks").insert({
+      type, name: f.name, image_url: f.image_url,
+      required_views: Number(f.required_views), payout: Number(f.payout),
+      unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
+      max_takers: Math.max(0, Number(f.max_takers) || 0),
+    });
+    if (error) toast.error(error.message);
+    else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" }); load(); }
   }
 
   async function del(t: any) {
@@ -407,6 +408,7 @@ function TasksTab() {
     </div>
   );
 }
+
 
 function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }) {
   const [rows, setRows] = useState<any[]>([]);
@@ -728,14 +730,14 @@ const emptyPkg = (): Pkg => ({ name: "", amount: 0, views: 0, duration: "", shor
 
 function SettingsTab() {
   const [s, setS] = useState<Record<string, any>>({});
-  const [pkgs, setPkgs] = useState<Pkg[]>([emptyPkg(), emptyPkg(), emptyPkg()]);
+  const [pkgs, setPkgs] = useState<Pkg[]>([emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg()]);
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     supabase.from("settings").select("key,value").then(({ data }) => {
       const o: Record<string, any> = {};
       data?.forEach((r) => { o[r.key] = r.value; });
-      const list: Pkg[] = Array.isArray(o.business_packages) ? o.business_packages.slice(0, 3) : o.business_package?.name ? [o.business_package] : [];
-      while (list.length < 3) list.push(emptyPkg());
+      const list: Pkg[] = Array.isArray(o.business_packages) ? o.business_packages.slice(0, 6) : o.business_package?.name ? [o.business_package] : [];
+      while (list.length < 6) list.push(emptyPkg());
       setPkgs(list);
       setS(o); setLoaded(true);
     });
@@ -790,7 +792,7 @@ function SettingsTab() {
         ))}
       </Section>
 
-      <Section title="Business packages (up to 3)">
+      <Section title="Business packages (up to 6)">
         <div className="space-y-4">
           {pkgs.map((p, i) => (
             <div key={i} className="rounded-2xl border border-border bg-black/30 p-4">
@@ -816,7 +818,7 @@ function SettingsTab() {
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">Fill at least the package name to make a package visible to businesses. Each Save button saves all 3 slots.</p>
+        <p className="mt-3 text-xs text-muted-foreground">Fill at least the package name to make a package visible to businesses. Each Save button saves all 6 slots.</p>
       </Section>
 
       <Section title="Commission Sale add-on">
