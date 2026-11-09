@@ -8,6 +8,7 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { BarChart3, Rocket } from "lucide-react";
+import { buildCommissionSalePackageName, getCampaignCheckoutTotal, getSellerCommission, isCommissionSalePackage } from "@/lib/commission-sale";
 
 export const Route = createFileRoute("/business")({
   head: () => ({ meta: [{ title: "Business — Daily WhatsApp Challenge" }, { name: "description", content: "Run status ad campaigns." }] }),
@@ -92,12 +93,11 @@ function Business() {
             <div key={c.id} className="glass rounded-2xl p-4">
               <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full rounded-xl object-cover" />
               <div className="mt-3 flex items-center justify-between">
-                <div className="text-xs text-muted-foreground">Txn: {c.transaction_id}</div>
+                <div className="text-xs text-muted-foreground">{getCommissionSalePackageName(c.package_name ?? "Campaign")} · ₹{c.amount} · Txn: {c.transaction_id}</div>
                 <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>{c.status}</span>
               </div>
-              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale add-on · Included in checkout</div>}
+              {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">Commission Sale · ₹{getSellerCommission(c.package_name) ?? 0} per product sale · Add-on included in checkout</div>}
               {c.reject_reason && <div className="mt-2 text-xs text-destructive-foreground/80">Reason: {c.reject_reason}</div>}
-              {c.commission_sale && <div className="mt-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-xs text-primary">{c.package_name} · Commission Sale add-on included in checkout</div>}
             </div>
           ))}
           {camps.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-sm text-muted-foreground">No campaigns yet.</div>}
@@ -121,13 +121,14 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
   const [image, setImage] = useState("");
   const [txn, setTxn] = useState("");
   const [commissionSale, setCommissionSale] = useState(false);
+  const [sellerCommission, setSellerCommission] = useState("");
   const addonFee = commissionSale && pkg.commission_sale_eligible ? commissionSalePrice : 0;
-  const totalAmount = (Number(pkg.amount) || 0) + addonFee;
+  const totalAmount = getCampaignCheckoutTotal(pkg.amount, addonFee, commissionSale && Boolean(pkg.commission_sale_eligible));
   async function submit() {
     const { error } = await supabase.from("campaigns").insert({
       business_username: me.username, image_url: image, transaction_id: txn, amount: totalAmount,
-      package_name: pkg.name ?? "", expected_views: Number(pkg.views) || 0,
-      commission_sale: commissionSale && Boolean(pkg.commission_sale_eligible), commission_sale_fee: addonFee,
+      package_name: buildCommissionSalePackageName(pkg.name ?? "", commissionSale && Boolean(pkg.commission_sale_eligible), Number(sellerCommission)),
+      expected_views: Number(pkg.views) || 0,
     });
     if (error) toast.error(error.message); else { toast.success("Submitted for approval"); onDone(); }
   }
@@ -150,6 +151,9 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
                 <input type="checkbox" checked={commissionSale} onChange={(e) => setCommissionSale(e.target.checked)} className="mt-1" />
                 <span><b>Commission Sale</b><span className="mt-1 block text-xs text-muted-foreground">Add the product-sale option for ₹{commissionSalePrice}. Product commissions are arranged directly with sellers.</span></span>
               </label>
+            )}
+            {commissionSale && pkg.commission_sale_eligible && (
+              <div className="mt-3"><Field label="Seller commission per product sold (₹)"><input type="number" min={0} className={inputCls} value={sellerCommission} onChange={(e) => setSellerCommission(e.target.value)} placeholder="Enter commission per sale" /></Field></div>
             )}
             <div className="mt-4 flex justify-end"><button className="btn-premium" disabled={!image} onClick={() => setStep(2)}>Next</button></div>
           </>
@@ -175,7 +179,7 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
               <div className="mt-2 text-xs text-muted-foreground">UPI: {upi}</div>
             </div>
             <div className="mt-4"><Field label="Transaction ID"><input className={inputCls} value={txn} onChange={(e) => setTxn(e.target.value)} /></Field></div>
-            <button disabled={!txn} onClick={submit} className="btn-premium mt-4 w-full">Submit for approval</button>
+            <button disabled={!txn || (commissionSale && !(Number(sellerCommission) > 0))} onClick={submit} className="btn-premium mt-4 w-full">Submit for approval</button>
           </>
         )}
       </div>
