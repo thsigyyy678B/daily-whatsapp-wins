@@ -18,7 +18,6 @@ import {
   countRows,
 } from "@/lib/limits";
 
-
 export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
@@ -66,7 +65,6 @@ async function purgeInactiveUsers() {
   }
 }
 
-
 function Admin() {
   const nav = useNavigate();
   const [tab, setTab] = useState<Tab>("Tasks");
@@ -113,7 +111,6 @@ function Admin() {
     </div>
   );
 }
-
 
 function CapacityBar() {
   const [c, setC] = useState<{
@@ -409,11 +406,14 @@ function TasksTab() {
   );
 }
 
-
 function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }) {
   const [rows, setRows] = useState<any[]>([]);
   useEffect(() => {
-    supabase.from("task_assignments").select("user_username,whatsapp_number,status").eq("task_id", taskId).then(({ data }) => setRows(data ?? []));
+    supabase
+      .from("task_assignments")
+      .select("user_username,whatsapp_number,status,assigned_at")
+      .eq("task_id", taskId)
+      .then(({ data }) => setRows(data ?? []));
   }, [taskId]);
   const active = rows.filter((r) => r.status === "assigned" || r.status === "submitted").length;
   const limited = (maxTakers ?? 0) > 0;
@@ -423,7 +423,16 @@ function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }
     <div className="mt-3">
       <div className="text-xs uppercase text-muted-foreground">{limited ? `Taken by · ${active}/${maxTakers}` : "Taken by"}</div>
       <ul className="mt-1 space-y-1 text-xs">
-        {rows.map((r, i) => <li key={i} className="text-primary">@{r.user_username} · {r.whatsapp_number} · {r.status}</li>)}
+        {rows.map((r, i) => (
+          <li key={i} className="text-primary">
+            @{r.user_username} · {r.whatsapp_number} · {r.status}
+            {r.assigned_at && (
+              <span className="text-muted-foreground">
+                {" "}· Taken: {new Date(r.assigned_at).toLocaleString()}
+              </span>
+            )}
+          </li>
+        ))}
       </ul>
     </div>
   );
@@ -431,8 +440,14 @@ function TakenList({ taskId, maxTakers }: { taskId: string; maxTakers?: number }
 
 function SubmissionsTab() {
   const [rows, setRows] = useState<any[]>([]);
+  const [previewProof, setPreviewProof] = useState<string | null>(null);
+
   const load = async () => {
-    const { data } = await supabase.from("task_assignments").select("*, task:tasks(*)").eq("status", "submitted").order("submitted_at", { ascending: false });
+    const { data } = await supabase
+      .from("task_assignments")
+      .select("*, task:tasks(*)")
+      .eq("status", "submitted")
+      .order("submitted_at", { ascending: false });
     setRows(data ?? []);
   };
   useEffect(() => { load(); }, []);
@@ -468,26 +483,80 @@ function SubmissionsTab() {
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      {rows.map((a) => (
-        <div key={a.id} className="glass rounded-2xl p-4">
-          <div className="flex gap-3">
-            {a.proof_image_url && <DriveMedia url={a.proof_image_url} alt="proof" className="h-24 w-24 rounded-xl object-cover" />}
-            <div className="flex-1">
-              <div className="font-semibold">{a.task?.name}</div>
-              <div className="text-xs text-muted-foreground">@{a.user_username} · WA: {a.whatsapp_number}</div>
-              <div className="text-xs">Views: <b>{a.views}</b> / {a.task?.required_views} · ₹{a.task?.payout}</div>
-              {a.unlock_transaction_id && <div className="text-xs text-primary">Unlock Txn: {a.unlock_transaction_id}</div>}
+    <>
+      <div className="grid gap-4 md:grid-cols-2">
+        {rows.map((a) => (
+          <div key={a.id} className="glass rounded-2xl p-4">
+            <div className="flex gap-3">
+              {a.proof_image_url && (
+                <button
+                  type="button"
+                  onClick={() => setPreviewProof(a.proof_image_url)}
+                  className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-white/10"
+                  title="Click to view full screen"
+                >
+                  <DriveMedia url={a.proof_image_url} alt="proof" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
+                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    🔍 View
+                  </span>
+                </button>
+              )}
+              <div className="flex-1">
+                <div className="font-semibold">{a.task?.name}</div>
+                <div className="text-xs text-muted-foreground">@{a.user_username} · WA: {a.whatsapp_number}</div>
+                <div className="text-xs">Views: <b>{a.views}</b> / {a.task?.required_views} · ₹{a.task?.payout}</div>
+                <div className="mt-1 text-xs text-emerald-400">
+                  Taken: <b>{a.assigned_at ? new Date(a.assigned_at).toLocaleString() : "N/A"}</b>
+                </div>
+                {a.submitted_at && (
+                  <div className="text-[11px] text-muted-foreground">
+                    Submitted: {new Date(a.submitted_at).toLocaleString()}
+                  </div>
+                )}
+                {a.unlock_transaction_id && <div className="text-xs text-primary">Unlock Txn: {a.unlock_transaction_id}</div>}
+              </div>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <button onClick={() => approve(a)} className="btn-premium text-xs">Approve</button>
+              <RejectBtn onReject={(r) => reject(a, r)} isPaid={a.task?.type === "paid"} />
             </div>
           </div>
-          <div className="mt-3 flex gap-2">
-            <button onClick={() => approve(a)} className="btn-premium text-xs">Approve</button>
-            <RejectBtn onReject={(r) => reject(a, r)} isPaid={a.task?.type === "paid"} />
-          </div>
-        </div>
-      ))}
-      {rows.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-muted-foreground">No pending submissions.</div>}
-    </div>
+        ))}
+        {rows.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-muted-foreground">No pending submissions.</div>}
+      </div>
+
+      {/* In-Platform Full Screen Modal */}
+      {previewProof &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
+            onClick={() => setPreviewProof(null)}
+          >
+            <div
+              className="relative flex max-h-[92vh] max-w-4xl w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-background/95 p-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-border/50 pb-3">
+                <div className="text-sm font-semibold">Proof Screenshot</div>
+                <button
+                  onClick={() => setPreviewProof(null)}
+                  className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/20"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <div className="mt-3 flex max-h-[78vh] items-center justify-center overflow-auto p-2">
+                <DriveMedia
+                  url={previewProof}
+                  alt="Proof full screen"
+                  className="max-h-[74vh] w-auto max-w-full rounded-xl object-contain"
+                />
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -851,3 +920,4 @@ function ModalAdmin({ children, onClose }: { children: React.ReactNode; onClose:
     document.body,
   );
 }
+
