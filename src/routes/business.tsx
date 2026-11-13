@@ -1,4 +1,3 @@
-
 import { createPortal } from "react-dom";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
@@ -9,10 +8,21 @@ import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
 import { BarChart3, Rocket } from "lucide-react";
-import { buildCommissionSalePackageName, getCampaignCheckoutTotal, getSellerCommission, isCommissionSalePackage } from "@/lib/commission-sale";
+import {
+  buildCommissionSalePackageName,
+  getCampaignCheckoutTotal,
+  getCommissionSalePackageName,
+  getSellerCommission,
+  isCommissionSalePackage,
+} from "@/lib/commission-sale";
 
 export const Route = createFileRoute("/business")({
-  head: () => ({ meta: [{ title: "Business — Daily WhatsApp Challenge" }, { name: "description", content: "Run status ad campaigns." }] }),
+  head: () => ({
+    meta: [
+      { title: "Business — Daily WhatsApp Challenge" },
+      { name: "description", content: "Run status ad campaigns." },
+    ],
+  }),
   component: Business,
 });
 
@@ -36,8 +46,21 @@ function Business() {
 
     const [{ data: b }, { data: settings }, { data: c }] = await Promise.all([
       supabase.from("businesses").select("*").eq("username", s.username).maybeSingle(),
-      supabase.from("settings").select("key,value").in("key", ["business_packages", "business_package", "upi_id", "rejection_terms_url", "commission_sale_price"]),
-      supabase.from("campaigns").select("*").eq("business_username", s.username).order("created_at", { ascending: false }),
+      supabase
+        .from("settings")
+        .select("key,value")
+        .in("key", [
+          "business_packages",
+          "business_package",
+          "upi_id",
+          "rejection_terms_url",
+          "commission_sale_price",
+        ]),
+      supabase
+        .from("campaigns")
+        .select("*")
+        .eq("business_username", s.username)
+        .order("created_at", { ascending: false }),
     ]);
 
     setMe(b);
@@ -48,9 +71,11 @@ function Business() {
     settings?.forEach((r) => {
       if (r.key === "upi_id") setUpi(String(r.value ?? ""));
       if (r.key === "rejection_terms_url") setRejTerms(String(r.value ?? ""));
-      if (r.key === "commission_sale_price") setCommissionSalePrice(Math.max(0, Number(r.value) || 0));
+      if (r.key === "commission_sale_price")
+        setCommissionSalePrice(Math.max(0, Number(r.value) || 0));
       if (r.key === "business_packages" && Array.isArray(r.value)) list = [...r.value];
-      if (r.key === "business_package" && (r.value as any)?.name && list.length === 0) list = [r.value];
+      if (r.key === "business_package" && (r.value as any)?.name && list.length === 0)
+        list = [r.value];
     });
 
     while (list.length < 6) list.push({});
@@ -61,7 +86,13 @@ function Business() {
     load();
   }, [load]);
 
-  if (!me) return <div className="min-h-screen"><SiteHeader /><div className="p-10 text-center text-muted-foreground">Loading…</div></div>;
+  if (!me)
+    return (
+      <div className="min-h-screen">
+        <SiteHeader />
+        <div className="p-10 text-center text-muted-foreground">Loading…</div>
+      </div>
+    );
 
   return (
     <div className="min-h-screen">
@@ -69,7 +100,9 @@ function Business() {
 
       <div className="mx-auto max-w-6xl px-6 py-10">
         <div className="glass rounded-3xl p-6">
-          <div className="text-xs uppercase tracking-widest text-primary">Business account</div>
+          <div className="text-xs uppercase tracking-widest text-primary">
+            Business account
+          </div>
 
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <h1 className="font-display text-3xl font-bold">{me.name}</h1>
@@ -84,40 +117,58 @@ function Business() {
         </div>
 
         <div className="mt-6 glass glow-emerald rounded-3xl p-8">
-          <div className="text-xs uppercase tracking-widest text-primary">Available packages</div>
+          <div className="text-xs uppercase tracking-widest text-primary">
+            Available packages
+          </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-3">
-            {pkgs.filter((p) => p?.name).map((p, i) => (
-              <div key={i} className="flex flex-col rounded-2xl border border-border bg-black/30 p-5">
-                <h2 className="font-display text-xl font-bold">{p.name}</h2>
+            {pkgs
+              .filter((p) => p?.name)
+              .map((p, i) => (
+                <div
+                  key={i}
+                  className="flex flex-col rounded-2xl border border-border bg-black/30 p-5"
+                >
+                  <h2 className="font-display text-xl font-bold">{p.name}</h2>
 
-                <div className="text-gradient-emerald mt-1 font-display text-2xl">
-                  ₹{p.amount}
-                </div>
-
-                {p.commission_sale_eligible && (
-                  <div className="mt-2 text-xs font-medium text-primary">
-                    Commission Sale add-on available · +₹{commissionSalePrice}
+                  <div className="text-gradient-emerald mt-1 font-display text-2xl">
+                    ₹{p.amount}
                   </div>
-                )}
 
-                <div className="mt-1 text-xs text-muted-foreground">
-                  {p.views}+ views · {p.duration}
+                  {p.commission_sale_eligible && (
+                    <div className="mt-2 text-xs font-medium text-primary">
+                      Commission Sale add-on available · +₹{commissionSalePrice}
+                    </div>
+                  )}
+
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {p.views}+ views · {p.duration}
+                  </div>
+
+                  <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
+
+                  {p.long_url && (
+                    <a
+                      href={p.long_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block text-xs text-primary underline"
+                    >
+                      Full details →
+                    </a>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setSel(p);
+                      setOpen(true);
+                    }}
+                    className="btn-premium mt-4"
+                  >
+                    <Rocket className="h-4 w-4" /> Create campaign
+                  </button>
                 </div>
-
-                <p className="mt-2 flex-1 text-sm text-muted-foreground">{p.short}</p>
-
-                {p.long_url && (
-                  <a href={p.long_url} target="_blank" rel="noreferrer" className="mt-2 inline-block text-xs text-primary underline">
-                    Full details →
-                  </a>
-                )}
-
-                <button onClick={() => { setSel(p); setOpen(true); }} className="btn-premium mt-4">
-                  <Rocket className="h-4 w-4" /> Create campaign
-                </button>
-              </div>
-            ))}
+              ))}
 
             {pkgs.filter((p) => p?.name).length === 0 && (
               <p className="text-sm text-muted-foreground md:col-span-3">
@@ -132,14 +183,20 @@ function Business() {
         <div className="grid gap-4 md:grid-cols-2">
           {camps.map((c) => (
             <div key={c.id} className="glass rounded-2xl p-4">
-              <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full rounded-xl object-cover" />
+              <DriveMedia
+                url={c.image_url}
+                alt="Campaign creative"
+                className="aspect-video w-full rounded-xl object-cover"
+              />
 
               <div className="mt-3 flex items-center justify-between">
                 <div className="text-xs text-muted-foreground">
                   {getCommissionSalePackageName(c.package_name ?? "Campaign")} · ₹{c.amount} · Txn: {c.transaction_id}
                 </div>
 
-                <span className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}>
+                <span
+                  className={`rounded-full px-3 py-1 text-xs ${c.status === "approved" ? "bg-primary/20 text-primary" : c.status === "rejected" ? "bg-destructive/20" : "bg-muted"}`}
+                >
                   {c.status}
                 </span>
               </div>
@@ -155,7 +212,9 @@ function Business() {
                   <div className="font-semibold">{c.product_name}</div>
 
                   {c.product_description && (
-                    <p className="mt-1 text-xs text-muted-foreground">{c.product_description}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {c.product_description}
+                    </p>
                   )}
 
                   <p className="mt-2 text-xs text-primary">
@@ -188,7 +247,10 @@ function Business() {
           commissionSalePrice={commissionSalePrice}
           me={me}
           onClose={() => setOpen(false)}
-          onDone={() => { setOpen(false); load(); }}
+          onDone={() => {
+            setOpen(false);
+            load();
+          }}
         />
       )}
     </div>
@@ -198,11 +260,20 @@ function Business() {
 function embed(url: string) {
   if (!url) return "";
   if (url.includes("/edit")) return url.replace("/edit", "/preview");
-  if (url.includes("docs.google.com/document")) return url + (url.includes("?") ? "&" : "?") + "embedded=true";
+  if (url.includes("docs.google.com/document"))
+    return url + (url.includes("?") ? "&" : "?") + "embedded=true";
   return url;
 }
 
-function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, onDone }: any) {
+function CampaignModal({
+  pkg,
+  upi,
+  rejTerms,
+  commissionSalePrice,
+  me,
+  onClose,
+  onDone,
+}: any) {
   const [step, setStep] = useState(1);
   const [image, setImage] = useState("");
   const [txn, setTxn] = useState("");
@@ -216,7 +287,7 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
   const totalAmount = getCampaignCheckoutTotal(
     pkg.amount,
     addonFee,
-    commissionSale && Boolean(pkg.commission_sale_eligible)
+    commissionSale && Boolean(pkg.commission_sale_eligible),
   );
 
   async function submit() {
@@ -229,18 +300,21 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
       package_name: buildCommissionSalePackageName(
         pkg.name ?? "",
         commissionSale && Boolean(pkg.commission_sale_eligible),
-        Number(sellerCommission)
+        Number(sellerCommission),
       ),
 
       commission_sale_enabled: commissionSale && Boolean(pkg.commission_sale_eligible),
 
-      product_name: commissionSale && pkg.commission_sale_eligible ? productName.trim() : null,
+      product_name:
+        commissionSale && pkg.commission_sale_eligible ? productName.trim() : null,
 
-      product_description: commissionSale && pkg.commission_sale_eligible ? productDescription.trim() : null,
+      product_description:
+        commissionSale && pkg.commission_sale_eligible ? productDescription.trim() : null,
 
-      seller_commission: commissionSale && pkg.commission_sale_eligible
-        ? Math.max(0, Number(sellerCommission) || 0)
-        : 0,
+      seller_commission:
+        commissionSale && pkg.commission_sale_eligible
+          ? Math.max(0, Number(sellerCommission) || 0)
+          : 0,
 
       expected_views: Number(pkg.views) || 0,
     });
@@ -253,9 +327,14 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur" onClick={onClose}>
-      <div className="glass w-full max-w-lg rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
-
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur"
+      onClick={onClose}
+    >
+      <div
+        className="glass w-full max-w-lg rounded-3xl p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
         {step === 1 && (
           <>
             <h3 className="font-display text-xl font-bold">Upload your ad creative</h3>
@@ -268,18 +347,28 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
 
             <div className="mt-4">
               <Field label="Google Drive image URL">
-                <input className={inputCls} value={image} onChange={(e) => setImage(e.target.value)} />
+                <input
+                  className={inputCls}
+                  value={image}
+                  onChange={(e) => setImage(e.target.value)}
+                />
               </Field>
             </div>
 
             {pkg.commission_sale_eligible && (
               <label className="mt-4 flex items-start gap-3 rounded-xl border border-primary/30 bg-primary/5 p-4 text-sm">
-                <input type="checkbox" checked={commissionSale} onChange={(e) => setCommissionSale(e.target.checked)} className="mt-1" />
+                <input
+                  type="checkbox"
+                  checked={commissionSale}
+                  onChange={(e) => setCommissionSale(e.target.checked)}
+                  className="mt-1"
+                />
 
                 <span>
                   <b>Commission Sale</b>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    Add the product-sale option for ₹{commissionSalePrice}. Product commissions are arranged directly with sellers.
+                    Add the product-sale option for ₹{commissionSalePrice}. Product commissions
+                    are arranged directly with sellers.
                   </span>
                 </span>
               </label>
@@ -322,7 +411,12 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
             <div className="mt-4 flex justify-end">
               <button
                 className="btn-premium"
-                disabled={!image || (commissionSale && pkg.commission_sale_eligible && (!productName.trim() || !(Number(sellerCommission) > 0)))}
+                disabled={
+                  !image ||
+                  (commissionSale &&
+                    pkg.commission_sale_eligible &&
+                    (!productName.trim() || !(Number(sellerCommission) > 0)))
+                }
                 onClick={() => setStep(2)}
               >
                 Next
@@ -346,8 +440,12 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
             </div>
 
             <div className="mt-4 flex justify-between">
-              <button className="btn-ghost-emerald" onClick={() => setStep(1)}>Back</button>
-              <button className="btn-premium" onClick={() => setStep(3)}>I agree, continue</button>
+              <button className="btn-ghost-emerald" onClick={() => setStep(1)}>
+                Back
+              </button>
+              <button className="btn-premium" onClick={() => setStep(3)}>
+                I agree, continue
+              </button>
             </div>
           </>
         )}
@@ -365,7 +463,9 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
               <img
                 alt="qr"
                 className="mx-auto h-44 w-44 rounded-lg bg-white p-2"
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(`upi://pay?pa=${upi}&am=${totalAmount}&cu=INR&tn=${pkg.name}${addonFee > 0 ? " Commission Sale" : ""}`)}`}
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(
+                  `upi://pay?pa=${upi}&am=${totalAmount}&cu=INR&tn=${pkg.name}${addonFee > 0 ? " Commission Sale" : ""}`,
+                )}`}
               />
 
               <div className="mt-2 text-xs text-muted-foreground">UPI: {upi}</div>
@@ -373,12 +473,20 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
 
             <div className="mt-4">
               <Field label="Transaction ID">
-                <input className={inputCls} value={txn} onChange={(e) => setTxn(e.target.value)} />
+                <input
+                  className={inputCls}
+                  value={txn}
+                  onChange={(e) => setTxn(e.target.value)}
+                />
               </Field>
             </div>
 
             <button
-              disabled={!txn || (commissionSale && (!(Number(sellerCommission) > 0) || !productName.trim()))}
+              disabled={
+                !txn ||
+                (commissionSale &&
+                  (!(Number(sellerCommission) > 0) || !productName.trim()))
+              }
               onClick={submit}
               className="btn-premium mt-4 w-full"
             >
@@ -386,11 +494,9 @@ function CampaignModal({ pkg, upi, rejTerms, commissionSalePrice, me, onClose, o
             </button>
           </>
         )}
-
       </div>
     </div>,
     document.body,
   );
 }
-
 
