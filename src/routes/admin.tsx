@@ -522,7 +522,7 @@ function TasksTab() {
 
               {t.commission_sale && (
                 <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
-                  <span>Commission Sale: {t.commission_percent}%</span>
+                  <span>Commission Sale: ₹{t.commission_percent}</span>
                   {t.commission_phone && <span>· 📞 {t.commission_phone}</span>}
                 </div>
               )}
