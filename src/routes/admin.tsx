@@ -371,7 +371,7 @@ function TasksTab() {
     const active = rows.filter((r) => r.type === type).length;
     if (active >= 25) { toast.error(`Max 25 ${type} tasks reached. Delete one first.`); return; }
     if (f.commission_sale && (!f.commission_phone.trim() || !f.commission_percent)) {
-      toast.error("Please enter both commission percentage and contact phone number.");
+      toast.error("Please enter both commission amount and contact phone number.");
       return;
     }
     const { error } = await supabase.from("tasks").insert({
