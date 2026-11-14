@@ -38,214 +38,305 @@ type Tab = (typeof TABS)[number];
 // Silent backend cleanup: an earner account with no task taken in the last
 // 3 days is deleted, together with its assignments, wallet history and
 // withdrawal requests. Runs when the super admin opens the panel.
-const INACTIVE_MS = 3 * 24 * 60 * 60 * 1000;
+const INACTIVITY_DAYS = 3;
 
-async function purgeInactiveUsers() {
-  const [{ data: users }, { data: assigns }] = await Promise.all([
-    supabase.from("app_users").select("username,created_at"),
-    supabase.from("task_assignments").select("user_username,assigned_at"),
-  ]);
-  if (!users) return;
-  const lastTaken = new Map<string, number>();
-  (assigns ?? []).forEach((a) => {
-    const t = new Date(a.assigned_at).getTime();
-    if (t > (lastTaken.get(a.user_username) ?? 0)) lastTaken.set(a.user_username, t);
-  });
-  const now = Date.now();
-  const stale = users.filter((u) => {
-    const taken = lastTaken.get(u.username);
-    const last = taken ?? new Date(u.created_at).getTime();
-    return now - last > INACTIVE_MS;
-  });
-  for (const u of stale) {
-    await supabase.from("task_assignments").delete().eq("user_username", u.username);
-    await supabase.from("wallet_history").delete().eq("user_username", u.username);
-    await supabase.from("withdrawals").delete().eq("user_username", u.username);
-    await supabase.from("app_users").delete().eq("username", u.username);
+async function purgeInactiveUsers(): Promise<number> {
+  try {
+    const cutoff = new Date(Date.now() - INACTIVITY_DAYS * 24 * 60 * 60 * 1000).toISOString();
+
+    const { data: users, error: userErr } = await supabase
+      .from("app_users")
+      .select("username, created_at");
+    if (userErr || !users || users.length === 0) return 0;
+
+    const { data: assigns, error: assignErr } = await supabase
+      .from("task_assignments")
+      .select("user_username, assigned_at");
+    if (assignErr) return 0;
+
+    const lastTakenByUser = new Map<string, string>();
+    for (const a of assigns ?? []) {
+      const prev = lastTakenByUser.get(a.user_username);
+      if (!prev || new Date(a.assigned_at) > new Date(prev)) {
+        lastTakenByUser.set(a.user_username, a.assigned_at);
+      }
+    }
+
+    const toDelete: string[] = [];
+    for (const u of users) {
+      const lastTaken = lastTakenByUser.get(u.username);
+      if (lastTaken) {
+        if (new Date(lastTaken) < new Date(cutoff)) toDelete.push(u.username);
+      } else {
+        if (u.created_at && new Date(u.created_at) < new Date(cutoff)) toDelete.push(u.username);
+      }
+    }
+
+    if (toDelete.length === 0) return 0;
+
+    await supabase.from("task_assignments").delete().in("user_username", toDelete);
+    await supabase.from("wallet_history").delete().in("user_username", toDelete);
+    await supabase.from("withdrawals").delete().in("user_username", toDelete);
+    const { error: delErr } = await supabase.from("app_users").delete().in("username", toDelete);
+    if (delErr) return 0;
+
+    return toDelete.length;
+  } catch {
+    return 0;
   }
 }
 
 function Admin() {
   const nav = useNavigate();
-  const [tab, setTab] = useState<Tab>("Tasks");
-  const [ready, setReady] = useState(false);
+  const [tab, setTab] = useState<Tab>("Users");
+  const [userCount, setUserCount] = useState<number | null>(null);
+  const [businessCount, setBusinessCount] = useState<number | null>(null);
+  const [earnerSignupFees, setEarnerSignupFees] = useState<number | null>(null);
+  const [earnerMonthlyDue, setEarnerMonthlyDue] = useState<number | null>(null);
+
+  const refreshCounts = useCallback(async () => {
+    const [u, b] = await Promise.all([
+      countRows("app_users"),
+      countRows("businesses"),
+    ]);
+    setUserCount(u);
+    setBusinessCount(b);
+
+    const [feeRes, usersWithTasksRes] = await Promise.all([
+      supabase.from("earner_signup_fees").select("total_fees").eq("id", 1).maybeSingle(),
+      supabase.from("app_users").select("tasks_completed"),
+    ]);
+
+    if (!feeRes.error && feeRes.data?.total_fees !== undefined) {
+      setEarnerSignupFees(Number(feeRes.data.total_fees) || 0);
+    } else {
+      setEarnerSignupFees(null);
+    }
+
+    if (!usersWithTasksRes.error && usersWithTasksRes.data) {
+      const due = calculateEarnerMonthlyDue(usersWithTasksRes.data.map((row) => ({ tasks_completed: row.tasks_completed })));
+      setEarnerMonthlyDue(due);
+    } else {
+      setEarnerMonthlyDue(null);
+    }
+  }, []);
+
   useEffect(() => {
     const s = getSession();
-    if (!s || s.role !== "admin") { nav({ to: "/login" }); return; }
-    purgeInactiveUsers().finally(() => setReady(true));
-  }, [nav]);
+    if (!s || s.role !== "admin") {
+      nav({ to: "/login" });
+      return;
+    }
+    purgeInactiveUsers().then(() => refreshCounts());
+    const onBizChange = () => refreshCounts();
+    window.addEventListener(BUSINESS_COUNT_CHANGED_EVENT, onBizChange);
+    return () => window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, onBizChange);
+  }, [nav, refreshCounts]);
 
   return (
     <div className="min-h-screen">
       <SiteHeader />
-      <div className="mx-auto max-w-7xl px-6 py-10">
-        <div className="glass rounded-3xl p-6">
-          <div className="text-xs uppercase tracking-widest text-primary">Super admin</div>
-          <h1 className="mt-2 font-display text-3xl font-bold">Control panel</h1>
+      <main className="container mx-auto px-4 py-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <h1 className="font-display text-3xl font-bold">Super Admin</h1>
+            <p className="text-sm text-muted-foreground">Manage earners, businesses, tasks, submissions and payouts.</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+              title="Registered earners vs maximum capacity"
+            >
+              Earners: {userCount === null ? "…" : `${userCount}/${MAX_USERS}`}
+            </span>
+            <span
+              className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+              title="Registered businesses vs maximum capacity"
+            >
+              Businesses: {businessCount === null ? "…" : `${businessCount}/${MAX_BUSINESSES}`}
+            </span>
+          </div>
+        </div>
+
+        {/* Accounting & Due Summary */}
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <div className="rounded-2xl border border-primary/20 bg-background/40 p-4">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Signup fee (accumulated)</div>
+            <div className="mt-1 font-display text-2xl font-bold text-primary">
+              ₹{earnerSignupFees === null ? "—" : earnerSignupFees.toLocaleString("en-IN")}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Permanent mandate fee (₹10/signup, never decreases)</div>
+          </div>
+
+          <div className="rounded-2xl border border-primary/20 bg-background/40 p-4">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Month end due · Earners</div>
+            <div className="mt-1 font-display text-2xl font-bold text-primary">
+              ₹{earnerMonthlyDue === null ? "—" : earnerMonthlyDue.toLocaleString("en-IN")}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Live tiered sum: ≤2: ₹25, 3-4: ₹35, 5-10: ₹45, &gt;10: ₹50</div>
+          </div>
+
+          <div className="rounded-2xl border border-primary/20 bg-background/40 p-4">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Month end due · Businesses</div>
+            <div className="mt-1 font-display text-2xl font-bold text-primary">
+              ₹{businessCount === null ? "—" : calculateBusinessMonthlyDue(businessCount).toLocaleString("en-IN")}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Live calculation: ₹50 per currently registered business</div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2 border-b border-border pb-3">
+          {TABS.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`rounded-full px-4 py-1.5 text-sm transition ${
+                tab === t ? "bg-primary text-primary-foreground font-semibold" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              }`}
+            >
+              {t}
+            </button>
+          ))}
         </div>
 
         <div className="mt-6">
-          <CapacityBar />
+          {tab === "Users" && <UsersTab onUsersChanged={refreshCounts} />}
+          {tab === "Tasks" && <TasksTab />}
+          {tab === "Submissions" && <SubmissionsTab />}
+          {tab === "Businesses" && <BusinessesTab onBusinessChanged={refreshCounts} />}
+          {tab === "Campaigns" && <CampaignsTab />}
+          {tab === "Withdrawals" && <WithdrawalsTab />}
+          {tab === "Settings" && <SettingsTab />}
         </div>
-
-        <div className="glass mt-6 flex flex-wrap gap-2 rounded-full p-2">
-          {TABS.map((t) => (
-            <button key={t} onClick={() => setTab(t)} className={`rounded-full px-4 py-2 text-sm transition ${tab === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{t}</button>
-          ))}
-        </div>
-
-        {ready ? (
-          <div className="mt-6">
-            {tab === "Users" && <UsersTab />}
-            {tab === "Tasks" && <TasksTab />}
-            {tab === "Submissions" && <SubmissionsTab />}
-            {tab === "Businesses" && <BusinessesTab />}
-            {tab === "Campaigns" && <CampaignsTab />}
-            {tab === "Withdrawals" && <WithdrawalsTab />}
-            {tab === "Settings" && <SettingsTab />}
-          </div>
-        ) : (
-          <div className="mt-6 p-10 text-center text-muted-foreground">Preparing panel…</div>
-        )}
-      </div>
+      </main>
     </div>
   );
 }
 
-function CapacityBar() {
-  const [c, setC] = useState<{
-    users: number;
-    biz: number;
-    taskCounts: number[] | null;
-    signupFeeTotal: number | null;
-    signupFeePerEarner: number | null;
-  }>({ users: 0, biz: 0, taskCounts: null, signupFeeTotal: null, signupFeePerEarner: null });
-  const refresh = useCallback(async () => {
-    const [users, biz, userRows, feeTotal] = await Promise.all([
-      countRows("app_users"),
-      countRows("businesses"),
-      supabase.from("app_users").select("tasks_done"),
-      supabase.from("earner_signup_fee_totals").select("total_amount,signup_fee").eq("id", true).maybeSingle(),
-    ]);
-    setC({
-      users,
-      biz,
-      taskCounts: userRows.error ? null : (userRows.data ?? []).map((row) => Number(row.tasks_done ?? 0)),
-      signupFeeTotal: feeTotal.error ? null : Number(feeTotal.data?.total_amount ?? 0),
-      signupFeePerEarner: feeTotal.error ? null : Number(feeTotal.data?.signup_fee ?? 10),
-    });
-  }, []);
-  useEffect(() => {
-    refresh();
-    const interval = window.setInterval(refresh, 30_000);
-    window.addEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener(BUSINESS_COUNT_CHANGED_EVENT, refresh);
-    };
-  }, [refresh]);
-  const items = [
-    { label: "Earner signups", used: c.users, max: MAX_USERS },
-    { label: "Business signups", used: c.biz, max: MAX_BUSINESSES },
-  ];
-  return (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      {items.map((it) => {
-        const pct = Math.min(100, Math.round((it.used / it.max) * 100));
-        const done = it.used >= it.max;
-        return (
-          <div key={it.label} className="rounded-2xl border border-border bg-black/30 p-4">
-            <div className="flex items-baseline justify-between">
-              <span className="text-xs uppercase tracking-[0.18em] text-muted-foreground">{it.label}</span>
-              <span className={`font-display text-lg font-bold ${done ? "text-destructive-foreground" : "text-primary"}`}>
-                {it.used}/{it.max}
-              </span>
-            </div>
-            <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-              <div className={`h-full rounded-full transition-all ${done ? "bg-destructive" : "bg-primary"}`} style={{ width: `${pct}%` }} />
-            </div>
-            <div className="mt-2 text-xs text-muted-foreground">
-              {done ? "Limit reached — signups closed" : `${it.max - it.used} seats remaining`}
-            </div>
-          </div>
-        );
-      })}
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <section className="rounded-2xl border border-primary/25 bg-primary/5 p-4" aria-live="polite">
-          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Earner signup fees</div>
-          <div className="mt-1 font-display text-2xl font-bold">
-            {c.signupFeeTotal === null ? "—" : `₹${c.signupFeeTotal.toLocaleString("en-IN")}`}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {c.signupFeeTotal === null || c.signupFeePerEarner === null
-              ? "Run the SQL setup to enable tracking"
-              : `₹${c.signupFeePerEarner.toLocaleString("en-IN")} per new earner · cumulative total never decreases`}
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-secondary/40 p-4" aria-live="polite">
-          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Earner month-end due</div>
-          <div className="mt-1 font-display text-2xl font-bold">
-            {c.taskCounts === null ? "—" : `₹${calculateEarnerMonthlyDue(c.taskCounts).toLocaleString("en-IN")}`}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {c.taskCounts === null ? "Could not load current earner totals" : "Amount to be paid at month end"}
-          </p>
-        </section>
-
-        <section className="rounded-2xl border border-border bg-secondary/40 p-4" aria-live="polite">
-          <div className="text-xs font-semibold uppercase tracking-widest text-primary">Business month-end due</div>
-          <div className="mt-1 font-display text-2xl font-bold">₹{calculateBusinessMonthlyDue(c.biz).toLocaleString("en-IN")}</div>
-          <p className="mt-1 text-xs text-muted-foreground">Amount to be paid at month end</p>
-        </section>
-      </div>
-    </div>
-  );
-}
-
-function UsersTab() {
+function UsersTab({ onUsersChanged }: { onUsersChanged?: () => void }) {
   const [rows, setRows] = useState<any[]>([]);
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const load = () => supabase.from("app_users").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
+
+  async function del(u: any) {
+    if (deleting) return;
+    setDeleting(true);
+    await supabase.from("task_assignments").delete().eq("user_username", u.username);
+    await supabase.from("wallet_history").delete().eq("user_username", u.username);
+    await supabase.from("withdrawals").delete().eq("user_username", u.username);
+    const { error } = await supabase.from("app_users").delete().eq("username", u.username);
+    setDeleting(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(`Deleted @${u.username}`);
+      setDeleteTarget(null);
+      await load();
+      onUsersChanged?.();
+    }
+  }
+
   return (
-    <div className="glass overflow-x-auto rounded-3xl p-4">
-      <table className="w-full text-sm">
-        <thead className="text-xs uppercase tracking-widest text-muted-foreground">
-          <tr><th className="p-3 text-left">Username</th><th className="text-left">Name</th><th className="text-left">Phone</th><th>Wallet</th><th>Done</th><th>Joined</th><th></th></tr>
-        </thead>
-        <tbody>
-          {rows.map((u) => (
-            <tr key={u.username} className="border-t border-border/50">
-              <td className="p-3 font-mono text-primary">{u.username}</td>
-              <td>{u.name}</td><td>{u.phone}</td>
-              <td className="text-center">₹{u.wallet}</td>
-              <td className="text-center">{u.tasks_done}</td>
-              <td className="text-xs text-muted-foreground">{new Date(u.created_at).toLocaleString()}</td>
-              <td><AddMoneyBtn user={u} onDone={load} /></td>
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">{rows.length} registered earners</div>
+      <div className="overflow-x-auto rounded-2xl border border-border">
+        <table className="w-full text-left text-sm">
+          <thead className="bg-secondary/40 text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="p-3">Username</th>
+              <th className="p-3">Name</th>
+              <th className="p-3">WhatsApp</th>
+              <th className="p-3">Joined</th>
+              <th className="p-3">Wallet</th>
+              <th className="p-3">Tasks</th>
+              <th className="p-3">Action</th>
             </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={7} className="p-10 text-center text-muted-foreground">No users yet.</td></tr>}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {rows.map((u) => (
+              <tr key={u.id} className="hover:bg-secondary/20">
+                <td className="p-3 font-mono font-bold text-primary">@{u.username}</td>
+                <td className="p-3">{u.name}</td>
+                <td className="p-3">{u.phone}</td>
+                <td className="p-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleString()}</td>
+                <td className="p-3 font-semibold">₹{u.wallet_balance}</td>
+                <td className="p-3">{u.tasks_completed}</td>
+                <td className="p-3 flex items-center gap-2">
+                  <AddMoneyModal user={u} onDone={load} />
+                  <button
+                    onClick={() => setDeleteTarget(u)}
+                    className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    title="Delete user"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur"
+          onClick={() => !deleting && setDeleteTarget(null)}
+        >
+          <div
+            className="glass w-full max-w-md rounded-3xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-bold">Delete earner @{deleteTarget.username}?</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              This permanently deletes the user account, their task assignments, wallet history, and withdrawal requests.
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                disabled={deleting}
+                onClick={() => setDeleteTarget(null)}
+                className="rounded-full border border-border px-4 py-2 text-sm disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleting}
+                onClick={() => del(deleteTarget)}
+                className="rounded-full border border-destructive/50 px-4 py-2 text-sm text-destructive-foreground disabled:opacity-50"
+              >
+                {deleting ? "Deleting…" : "Yes, delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function AddMoneyBtn({ user, onDone }: any) {
+function AddMoneyModal({ user, onDone }: { user: any; onDone: () => void }) {
   const [open, setOpen] = useState(false);
-  const [amt, setAmt] = useState(""); const [reason, setReason] = useState("");
+  const [amt, setAmt] = useState("");
+  const [reason, setReason] = useState("");
+
   async function submit() {
-    const a = Number(amt);
-    if (!a || a <= 0) return;
-    await supabase.from("app_users").update({ wallet: Number(user.wallet) + a }).eq("username", user.username);
-    await supabase.from("wallet_history").insert({ user_username: user.username, amount: a, type: "admin_credit", note: reason.slice(0, 50) });
-    toast.success("Credited");
-    setOpen(false); onDone();
+    const n = Number(amt);
+    if (!n || n <= 0) { toast.error("Enter a valid amount"); return; }
+    if (!reason.trim()) { toast.error("Reason is required"); return; }
+    const { error: err1 } = await supabase.from("app_users").update({ wallet_balance: Number(user.wallet_balance) + n }).eq("username", user.username);
+    if (err1) { toast.error(err1.message); return; }
+    await supabase.from("wallet_history").insert({ user_username: user.username, amount: n, type: "bonus", reason: reason.slice(0, 50) });
+    toast.success(`Added ₹${n}`);
+    setOpen(false);
+    onDone();
   }
+
   return (
     <>
-      <button className="btn-ghost-emerald text-xs" onClick={() => setOpen(true)}>+ Add</button>
+      <button onClick={() => setOpen(true)} className="rounded-full bg-primary/10 px-3 py-1 text-xs text-primary hover:bg-primary/20">+ Money</button>
       {open && <ModalAdmin onClose={() => setOpen(false)}>
         <h3 className="font-display text-lg font-bold">Add money to @{user.username}</h3>
         <Field label="Amount (₹)"><input type="number" className={inputCls} value={amt} onChange={(e) => setAmt(e.target.value)} /></Field>
@@ -259,7 +350,17 @@ function AddMoneyBtn({ user, onDone }: any) {
 function TasksTab() {
   const [rows, setRows] = useState<any[]>([]);
   const [type, setType] = useState<"free" | "paid">("free");
-  const [f, setF] = useState({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" });
+  const [f, setF] = useState({
+    name: "",
+    image_url: "",
+    required_views: "",
+    payout: "",
+    unlock_amount: "",
+    max_takers: "",
+    commission_sale: false,
+    commission_phone: "",
+    commission_percent: "",
+  });
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -269,14 +370,38 @@ function TasksTab() {
   async function add() {
     const active = rows.filter((r) => r.type === type).length;
     if (active >= 25) { toast.error(`Max 25 ${type} tasks reached. Delete one first.`); return; }
+    if (f.commission_sale && (!f.commission_phone.trim() || !f.commission_percent)) {
+      toast.error("Please enter both commission percentage and contact phone number.");
+      return;
+    }
     const { error } = await supabase.from("tasks").insert({
-      type, name: f.name, image_url: f.image_url,
-      required_views: Number(f.required_views), payout: Number(f.payout),
+      type,
+      name: f.name,
+      image_url: f.image_url,
+      required_views: Number(f.required_views),
+      payout: Number(f.payout),
       unlock_amount: type === "paid" ? Number(f.unlock_amount) : 0,
       max_takers: Math.max(0, Number(f.max_takers) || 0),
+      commission_sale: Boolean(f.commission_sale),
+      commission_phone: f.commission_sale ? f.commission_phone.trim() : null,
+      commission_percent: f.commission_sale ? Number(f.commission_percent) || 0 : null,
     });
     if (error) toast.error(error.message);
-    else { toast.success("Added"); setF({ name: "", image_url: "", required_views: "", payout: "", unlock_amount: "", max_takers: "" }); load(); }
+    else {
+      toast.success("Added");
+      setF({
+        name: "",
+        image_url: "",
+        required_views: "",
+        payout: "",
+        unlock_amount: "",
+        max_takers: "",
+        commission_sale: false,
+        commission_phone: "",
+        commission_percent: "",
+      });
+      load();
+    }
   }
 
   async function del(t: any) {
@@ -342,6 +467,43 @@ function TasksTab() {
           {type === "paid" && <Field label="Unlock amount (₹)"><input type="number" className={inputCls} value={f.unlock_amount} onChange={(e) => setF({ ...f, unlock_amount: e.target.value })} /></Field>}
           <Field label="Max takers (0 = unlimited)"><input type="number" className={inputCls} value={f.max_takers} onChange={(e) => setF({ ...f, max_takers: e.target.value })} /></Field>
         </div>
+
+        {/* Commission Sale Option */}
+        <div className="mt-4 rounded-2xl border border-border/50 bg-background/30 p-4">
+          <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded accent-primary"
+              checked={f.commission_sale}
+              onChange={(e) => setF({ ...f, commission_sale: e.target.checked })}
+            />
+            <span>Commission sale option (optional)</span>
+          </label>
+          {f.commission_sale && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label="Commission percentage (%)">
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  placeholder="e.g. 15"
+                  className={inputCls}
+                  value={f.commission_percent}
+                  onChange={(e) => setF({ ...f, commission_percent: e.target.value })}
+                />
+              </Field>
+              <Field label="Business contact phone number (when sales happen)">
+                <input
+                  placeholder="WhatsApp / Phone number"
+                  className={inputCls}
+                  value={f.commission_phone}
+                  onChange={(e) => setF({ ...f, commission_phone: e.target.value })}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+
         <button className="btn-premium mt-4" onClick={add}><Plus className="h-4 w-4" /> Add task</button>
       </div>
 
@@ -358,6 +520,14 @@ function TasksTab() {
                 <button onClick={() => setDeleteTarget(t)} className="text-destructive-foreground/80"><Trash2 className="h-4 w-4" /></button>
               </div>
               <div className="mt-2 text-xs text-muted-foreground">₹{t.payout} · {t.required_views}+ views{t.type === "paid" && ` · unlock ₹${t.unlock_amount}`}</div>
+
+              {t.commission_sale && (
+                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+                  <span>Commission Sale: {t.commission_percent}%</span>
+                  {t.commission_phone && <span>· 📞 {t.commission_phone}</span>}
+                </div>
+              )}
+
               <TakenList taskId={t.id} maxTakers={t.max_takers} />
             </div>
           </div>
@@ -453,290 +623,171 @@ function SubmissionsTab() {
   useEffect(() => { load(); }, []);
 
   async function approve(a: any) {
-    const { data: u } = await supabase.from("app_users").select("*").eq("username", a.user_username).maybeSingle();
-    if (!u) return;
-    const payout = Number(a.task.payout);
-    await supabase.from("app_users").update({
-      wallet: Number(u.wallet) + payout,
-      tasks_done: u.tasks_done + 1,
-      first_task_done: true,
-    }).eq("username", u.username);
-    await supabase.from("wallet_history").insert({ user_username: u.username, amount: payout, type: "task_payout", note: a.task.name });
-    await supabase.from("task_assignments").update({ status: "approved", reviewed_at: new Date().toISOString() }).eq("id", a.id);
-    // Referral bonus on FIRST task only
-    if (!u.first_task_done && u.referred_by) {
-      const { data: settings } = await supabase.from("settings").select("value").eq("key", "referral_percent").maybeSingle();
-      const pct = Number(settings?.value ?? 10);
-      const bonus = (payout * pct) / 100;
-      const { data: refUser } = await supabase.from("app_users").select("wallet").eq("username", u.referred_by).maybeSingle();
-      if (refUser) {
-        await supabase.from("app_users").update({ wallet: Number(refUser.wallet) + bonus }).eq("username", u.referred_by);
-        await supabase.from("wallet_history").insert({ user_username: u.referred_by, amount: bonus, type: "referral", note: `From @${u.username}` });
-      }
+    const payout = a.task?.payout ?? 0;
+    const { data: u } = await supabase.from("app_users").select("wallet_balance,tasks_completed").eq("username", a.user_username).single();
+    if (u) {
+      await supabase.from("app_users").update({
+        wallet_balance: Number(u.wallet_balance) + payout,
+        tasks_completed: Number(u.tasks_completed) + 1,
+      }).eq("username", a.user_username);
+      await supabase.from("wallet_history").insert({
+        user_username: a.user_username,
+        amount: payout,
+        type: "task_payout",
+        reason: `Completed: ${a.task?.name ?? "task"}`,
+      });
     }
-    toast.success("Approved & credited"); load();
+    await supabase.from("task_assignments").update({ status: "approved" }).eq("id", a.id);
+    toast.success("Approved and credited");
+    load();
   }
 
   async function reject(a: any, reason: string) {
-    await supabase.from("task_assignments").update({ status: "rejected", reject_reason: reason, reviewed_at: new Date().toISOString() }).eq("id", a.id);
-    toast.success("Rejected"); load();
+    await supabase.from("task_assignments").update({ status: "rejected", reject_reason: reason }).eq("id", a.id);
+    toast.success("Rejected");
+    load();
   }
 
   return (
-    <>
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">{rows.length} pending submissions</div>
       <div className="grid gap-4 md:grid-cols-2">
         {rows.map((a) => (
           <div key={a.id} className="glass rounded-2xl p-4">
-            <div className="flex gap-3">
-              {a.proof_image_url && (
-                <button
-                  type="button"
-                  onClick={() => setPreviewProof(a.proof_image_url)}
-                  className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-white/10"
-                  title="Click to view full screen"
-                >
-                  <DriveMedia url={a.proof_image_url} alt="proof" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                  <span className="absolute inset-0 flex items-center justify-center bg-black/40 text-[10px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100">
-                    🔍 View
-                  </span>
-                </button>
-              )}
+            <div className="flex gap-4">
+              <button
+                type="button"
+                onClick={() => setPreviewProof(a.proof_image_url)}
+                className="group relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-xl border border-border/50 text-left focus:outline-none focus:ring-2 focus:ring-primary"
+                title="Click to view full screen"
+              >
+                <DriveMedia url={a.proof_image_url} alt="Proof screenshot" className="h-full w-full object-cover transition duration-200 group-hover:scale-105" />
+                <span className="absolute inset-x-0 bottom-0 bg-black/70 py-0.5 text-center text-[10px] font-medium text-white backdrop-blur">
+                  Click to view
+                </span>
+              </button>
               <div className="flex-1">
                 <div className="font-semibold">{a.task?.name}</div>
-                <div className="text-xs text-muted-foreground">@{a.user_username} · WA: {a.whatsapp_number}</div>
-                <div className="text-xs">Views: <b>{a.views}</b> / {a.task?.required_views} · ₹{a.task?.payout}</div>
-                <div className="mt-1 text-xs text-emerald-400">
-                  Taken: <b>{a.assigned_at ? new Date(a.assigned_at).toLocaleString() : "N/A"}</b>
+                <div className="text-xs text-primary font-mono">@{a.user_username} · {a.whatsapp_number}</div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  Views submitted: <b className="text-foreground">{a.proof_views}</b> (req: {a.task?.required_views}) · Payout: ₹{a.task?.payout}
                 </div>
-                {a.submitted_at && (
-                  <div className="text-[11px] text-muted-foreground">
-                    Submitted: {new Date(a.submitted_at).toLocaleString()}
+                {a.assigned_at && (
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    Taken: {new Date(a.assigned_at).toLocaleString()}
                   </div>
                 )}
-                {a.unlock_transaction_id && <div className="text-xs text-primary">Unlock Txn: {a.unlock_transaction_id}</div>}
+                {a.unlock_transaction_id && <div className="text-xs text-muted-foreground">Unlock txn: {a.unlock_transaction_id}</div>}
               </div>
             </div>
-            <div className="mt-3 flex gap-2">
-              <button onClick={() => approve(a)} className="btn-premium text-xs">Approve</button>
-              <RejectBtn onReject={(r) => reject(a, r)} isPaid={a.task?.type === "paid"} />
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button className="btn-premium text-xs" onClick={() => approve(a)}>Approve</button>
+              <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => reject(a, "target views not reached")}>Reject: Views</button>
+              <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => reject(a, "contact to know more")}>Reject: Contact</button>
+              {a.task?.type === "paid" && (
+                <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => reject(a, "sponsor unlock payment was not received")}>Reject: No unlock payment</button>
+              )}
             </div>
           </div>
         ))}
-        {rows.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-muted-foreground">No pending submissions.</div>}
       </div>
 
-      {/* In-Platform Full Screen Modal */}
-      {previewProof &&
-        createPortal(
+      {previewProof && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur"
+          onClick={() => setPreviewProof(null)}
+        >
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-md"
-            onClick={() => setPreviewProof(null)}
+            className="glass relative flex max-h-[90vh] w-full max-w-4xl flex-col items-center overflow-hidden rounded-3xl p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="relative flex max-h-[92vh] max-w-4xl w-full flex-col overflow-hidden rounded-2xl border border-white/10 bg-background/95 p-4 shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                <div className="text-sm font-semibold">Proof Screenshot</div>
-                <button
-                  onClick={() => setPreviewProof(null)}
-                  className="rounded-full bg-white/10 px-3 py-1 text-xs font-semibold text-white transition hover:bg-white/20"
-                >
-                  ✕ Close
-                </button>
-              </div>
-              <div className="mt-3 flex max-h-[78vh] items-center justify-center overflow-auto p-2">
-                <DriveMedia
-                  url={previewProof}
-                  alt="Proof full screen"
-                  className="max-h-[74vh] w-auto max-w-full rounded-xl object-contain"
-                />
-              </div>
+            <div className="flex w-full items-center justify-between pb-3">
+              <h3 className="font-display text-base font-bold sm:text-lg">Submitted proof screenshot</h3>
+              <button
+                type="button"
+                onClick={() => setPreviewProof(null)}
+                className="rounded-full border border-border bg-secondary/80 px-3 py-1 text-xs font-semibold hover:bg-secondary"
+              >
+                ✕ Close
+              </button>
             </div>
-          </div>,
-          document.body,
-        )}
-    </>
-  );
-}
-
-function RejectBtn({ onReject, isPaid }: { onReject: (r: string) => void; isPaid: boolean }) {
-  const [open, setOpen] = useState(false);
-  const reasons = [
-    "Target views not reached",
-    "Contact us to know more",
-    ...(isPaid ? ["Sponsor unlock payment not received"] : []),
-  ];
-  return (
-    <>
-      <button onClick={() => setOpen(true)} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs text-destructive-foreground">Reject</button>
-      {open && <ModalAdmin onClose={() => setOpen(false)}>
-        <h3 className="font-display text-lg font-bold">Rejection reason</h3>
-        <div className="mt-4 space-y-2">
-          {reasons.map((r) => (
-            <button key={r} onClick={() => { onReject(r); setOpen(false); }} className="w-full rounded-xl bg-background/60 p-3 text-left text-sm hover:bg-primary/10">{r}</button>
-          ))}
+            <div className="flex max-h-[75vh] w-full items-center justify-center overflow-auto rounded-2xl bg-black/40 p-2">
+              <DriveMedia
+                url={previewProof}
+                alt="Submitted proof full view"
+                className="max-h-[70vh] max-w-full rounded-xl object-contain shadow-2xl"
+              />
+            </div>
+          </div>
         </div>
-      </ModalAdmin>}
-    </>
-  );
-}
-
-function BusinessesTab() {
-  const [rows, setRows] = useState<any[]>([]);
-  const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const load = useCallback(() => {
-    supabase.from("businesses").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
-  }, []);
-  useEffect(() => { load(); }, [load]);
-
-  async function deleteBusiness(business: any) {
-    if (deleting) return;
-    setDeleting(true);
-    const { data, error } = await supabase
-      .from("businesses")
-      .delete()
-      .eq("username", business.username)
-      .select("username");
-    setDeleting(false);
-
-    if (error) {
-      toast.error(`Business deletion failed: ${error.message}`);
-      return;
-    }
-    if (!data?.length) {
-      toast.error("No business account was deleted. Refresh and try again.");
-      load();
-      return;
-    }
-
-    toast.success("Business account deleted");
-    setDeleteTarget(null);
-    load();
-    window.dispatchEvent(new Event(BUSINESS_COUNT_CHANGED_EVENT));
-  }
-
-  return (
-    <div className="glass overflow-x-auto rounded-3xl p-4">
-      <table className="w-full text-sm">
-        <thead className="text-xs uppercase text-muted-foreground">
-          <tr><th className="p-3 text-left">Username</th><th className="text-left">Name</th><th className="text-left">Phone</th><th className="text-left">Category</th><th>Joined</th><th></th></tr>
-        </thead>
-        <tbody>
-          {rows.map((b) => (
-            <tr key={b.username} className="border-t border-border/50">
-              <td className="p-3 font-mono text-primary">{b.username}</td><td>{b.name}</td><td>{b.phone}</td><td>{b.category}</td>
-              <td className="text-xs text-muted-foreground">{new Date(b.created_at).toLocaleString()}</td>
-              <td className="p-3 text-right"><button onClick={() => setDeleteTarget(b)} className="inline-flex items-center gap-1 rounded-full border border-destructive/50 px-3 py-1.5 text-xs text-destructive-foreground"><Trash2 className="h-3.5 w-3.5" /> Delete</button></td>
-            </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">No businesses.</td></tr>}
-        </tbody>
-      </table>
-      {deleteTarget && <ModalAdmin onClose={() => !deleting && setDeleteTarget(null)}>
-        <h3 className="font-display text-lg font-bold">Delete business account?</h3>
-        <p className="mt-2 text-sm text-muted-foreground">This permanently removes @{deleteTarget.username} from the registered businesses.</p>
-        <div className="mt-5 flex justify-end gap-2">
-          <button disabled={deleting} onClick={() => setDeleteTarget(null)} className="rounded-full border border-border px-4 py-2 text-sm disabled:opacity-50">Cancel</button>
-          <button disabled={deleting} onClick={() => deleteBusiness(deleteTarget)} className="rounded-full border border-destructive/50 px-4 py-2 text-sm text-destructive-foreground disabled:opacity-50">{deleting ? "Deleting…" : "Yes, delete"}</button>
-        </div>
-      </ModalAdmin>}
+      )}
     </div>
   );
 }
 
-function CampaignsTab() {
+function BusinessesTab({ onBusinessChanged }: { onBusinessChanged?: () => void }) {
   const [rows, setRows] = useState<any[]>([]);
-  const [viewsDraft, setViewsDraft] = useState<Record<string, string>>({});
   const [deleteTarget, setDeleteTarget] = useState<any | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const load = () => supabase.from("campaigns").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
+  const load = () => supabase.from("businesses").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
 
-  async function setViews(c: any) {
-    const n = Number(viewsDraft[c.id]);
-    if (!Number.isFinite(n) || n < 0) { toast.error("Enter a valid number of views"); return; }
-    const { error } = await supabase.from("campaigns").update({ views: n }).eq("id", c.id);
-    if (error) toast.error(error.message);
-    else { toast.success("Views updated"); setViewsDraft({ ...viewsDraft, [c.id]: "" }); load(); }
-  }
-
-  async function act(c: any, status: "approved" | "rejected") {
-    const reason = status === "rejected" ? prompt("Reason?") ?? "" : null;
-    await supabase.from("campaigns").update({ status, reject_reason: reason }).eq("id", c.id);
-    toast.success(status); load();
-  }
-
-  async function del(c: any) {
+  async function del(b: any) {
     if (deleting) return;
     setDeleting(true);
-
-    const { data, error } = await supabase
-      .from("campaigns")
-      .delete()
-      .eq("id", c.id)
-      .select("id");
-
+    await supabase.from("campaigns").delete().eq("business_username", b.username);
+    const { error } = await supabase.from("businesses").delete().eq("username", b.username);
     setDeleting(false);
-
     if (error) {
-      console.error("Campaign deletion failed:", error);
-      toast.error(`Delete failed: ${error.message}`);
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      toast.error("No campaign was deleted. Please refresh and try again.");
+      toast.error(error.message);
+    } else {
+      toast.success(`Deleted business @${b.username}`);
+      setDeleteTarget(null);
       await load();
-      return;
+      window.dispatchEvent(new Event(BUSINESS_COUNT_CHANGED_EVENT));
+      onBusinessChanged?.();
     }
-
-    toast.success("Campaign deleted successfully");
-    setDeleteTarget(null);
-    await load();
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {rows.map((c) => (
-        <div key={c.id} className="glass overflow-hidden rounded-2xl">
-          <DriveMedia url={c.image_url} alt="Campaign creative" className="aspect-video w-full object-cover" />
-          <div className="p-4">
-            <div className="text-xs uppercase text-primary">@{c.business_username}</div>
-            <div className="text-sm">₹{c.amount} · Txn: {c.transaction_id}</div>
-            <div className="mt-1 text-xs text-muted-foreground">Status: {c.status}{c.package_name ? ` · ${getCommissionSalePackageName(c.package_name)}` : ""} · Views: {c.views ?? 0}</div>
-            {isCommissionSalePackage(c.package_name ?? "") && <div className="mt-2 text-xs text-primary">Commission Sale add-on · Included in ₹{c.amount} total</div>}
-            {c.status === "approved" && (
-              <div className="mt-2 flex items-center gap-2">
-                <input type="number" min={0} placeholder="New views" value={viewsDraft[c.id] ?? ""} onChange={(e) => setViewsDraft({ ...viewsDraft, [c.id]: e.target.value })} className={`${inputCls} w-32 py-1.5 text-xs`} />
-                <button onClick={() => setViews(c)} className="btn-soft text-xs">Update views</button>
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">{rows.length} businesses registered</div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        {rows.map((b) => (
+          <div key={b.id} className="glass rounded-2xl p-4 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">{b.name}</div>
+                <button
+                  onClick={() => setDeleteTarget(b)}
+                  className="rounded-lg p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  title="Delete business"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
               </div>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              {c.status === "pending" && (
-                <>
-                  <button onClick={() => act(c, "approved")} className="btn-premium text-xs">Approve</button>
-                  <button onClick={() => act(c, "rejected")} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Reject</button>
-                </>
-              )}
-              <button onClick={() => setDeleteTarget(c)} className="rounded-full border border-destructive/50 px-4 py-1.5 text-xs">Delete</button>
+              <div className="text-xs font-mono text-primary">@{b.username} · {b.phone}</div>
+              <div className="mt-2 text-xs text-muted-foreground">Category: {b.category} · {b.employees} employees</div>
+              <div className="text-xs text-muted-foreground">Target: {b.target_audience}</div>
             </div>
+            <div className="mt-3 text-[11px] text-muted-foreground">Joined: {new Date(b.created_at).toLocaleDateString()}</div>
           </div>
-        </div>
-      ))}
-      {rows.length === 0 && <div className="glass col-span-full rounded-2xl p-10 text-center text-muted-foreground">No campaigns.</div>}
+        ))}
+      </div>
 
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur"
           onClick={() => !deleting && setDeleteTarget(null)}
         >
-          <div className="glass w-full max-w-md rounded-3xl p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-lg font-bold">Delete campaign?</h3>
+          <div
+            className="glass w-full max-w-md rounded-3xl p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-display text-lg font-bold">Delete business @{deleteTarget.username}?</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              This permanently removes the campaign for @{deleteTarget.business_username}. This action cannot be undone.
+              This permanently deletes "{deleteTarget.name}" and all campaigns created under this business account.
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <button
@@ -761,104 +812,243 @@ function CampaignsTab() {
   );
 }
 
+function CampaignsTab() {
+  const [rows, setRows] = useState<any[]>([]);
+  const [viewsInput, setViewsInput] = useState<Record<string, string>>({});
+  const [savingViews, setSavingViews] = useState<string | null>(null);
+
+  const load = () => supabase.from("campaigns").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
+  useEffect(() => { load(); }, []);
+
+  async function setStatus(c: any, status: string) {
+    await supabase.from("campaigns").update({ status }).eq("id", c.id);
+    toast.success(`Marked as ${status}`);
+    load();
+  }
+
+  async function updateViews(c: any) {
+    const raw = viewsInput[c.id];
+    const val = Math.max(0, Number(raw) || 0);
+    setSavingViews(c.id);
+    const { error } = await supabase.from("campaigns").update({ views: val }).eq("id", c.id);
+    setSavingViews(null);
+    if (error) {
+      toast.error(`Update failed: ${error.message}`);
+    } else {
+      toast.success(`Views updated to ${val}`);
+      load();
+    }
+  }
+
+  async function del(c: any) {
+    if (!confirm(`Delete campaign "${c.package_name ?? "Campaign"}"?`)) return;
+    const { error } = await supabase.from("campaigns").delete().eq("id", c.id);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Campaign deleted");
+      load();
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">{rows.length} campaigns</div>
+      <div className="grid gap-4 md:grid-cols-2">
+        {rows.map((c) => (
+          <div key={c.id} className="glass overflow-hidden rounded-2xl">
+            <DriveMedia url={c.image_url} alt="Campaign ad" className="aspect-video w-full object-cover" />
+            <div className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">{getCommissionSalePackageName(c.package_name ?? "Campaign")}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs uppercase text-primary">{c.status}</span>
+                  <button onClick={() => del(c)} className="text-destructive-foreground/80 hover:text-destructive"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              </div>
+              {isCommissionSalePackage(c.package_name) && (
+                <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                  Commission Sale Add-on
+                </div>
+              )}
+              <div className="text-xs font-mono text-muted-foreground">@{c.business_username} · ₹{c.amount} · Txn: {c.transaction_id}</div>
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-secondary/30 p-2">
+                <span className="text-xs text-muted-foreground">Views reached:</span>
+                <input
+                  type="number"
+                  min={0}
+                  className="w-28 rounded-lg border border-border bg-background px-2 py-1 text-xs"
+                  placeholder={String(c.views ?? 0)}
+                  value={viewsInput[c.id] ?? String(c.views ?? 0)}
+                  onChange={(e) => setViewsInput({ ...viewsInput, [c.id]: e.target.value })}
+                />
+                <button
+                  disabled={savingViews === c.id}
+                  onClick={() => updateViews(c)}
+                  className="rounded-lg bg-primary/20 px-3 py-1 text-xs font-medium text-primary hover:bg-primary/30 disabled:opacity-50"
+                >
+                  {savingViews === c.id ? "Saving…" : "Update"}
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button className="btn-premium text-xs" onClick={() => setStatus(c, "approved")}>Approve</button>
+                <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => setStatus(c, "rejected")}>Reject</button>
+                <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => setStatus(c, "running")}>Mark Running</button>
+                <button className="rounded-full bg-secondary px-3 py-1 text-xs" onClick={() => setStatus(c, "completed")}>Mark Completed</button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function WithdrawalsTab() {
   const [rows, setRows] = useState<any[]>([]);
   const load = () => supabase.from("withdrawals").select("*").order("created_at", { ascending: false }).then(({ data }) => setRows(data ?? []));
   useEffect(() => { load(); }, []);
+
   async function done(w: any) {
-    await supabase.from("withdrawals").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", w.id);
-    await supabase.from("wallet_history").insert({ user_username: w.user_username, amount: 0, type: "withdraw_done", note: `₹${w.amount} via ${w.method}` });
-    toast.success("Marked done"); load();
+    await supabase.from("withdrawals").update({ status: "withdrawn", processed_at: new Date().toISOString() }).eq("id", w.id);
+    await supabase.from("wallet_history").insert({
+      user_username: w.user_username,
+      amount: -Number(w.amount),
+      type: "withdrawal",
+      reason: `Payout completed via ${w.method}`,
+    });
+    toast.success("Marked as withdrawn");
+    load();
   }
+
   return (
-    <div className="glass overflow-x-auto rounded-3xl p-4">
-      <table className="w-full text-sm">
-        <thead className="text-xs uppercase text-muted-foreground">
-          <tr><th className="p-3 text-left">User</th><th>Amount</th><th className="text-left">Method</th><th className="text-left">Details</th><th>Status</th><th></th></tr>
-        </thead>
-        <tbody>
-          {rows.map((w) => (
-            <tr key={w.id} className="border-t border-border/50">
-              <td className="p-3 font-mono text-primary">@{w.user_username}</td>
-              <td className="text-center">₹{w.amount}</td>
-              <td>{w.method}</td>
-              <td className="text-xs">{w.details}</td>
-              <td className="text-center">{w.status}</td>
-              <td>{w.status === "pending" && <button onClick={() => done(w)} className="btn-premium text-xs">Mark done</button>}</td>
-            </tr>
-          ))}
-          {rows.length === 0 && <tr><td colSpan={6} className="p-10 text-center text-muted-foreground">No requests.</td></tr>}
-        </tbody>
-      </table>
+    <div className="space-y-4">
+      <div className="text-sm text-muted-foreground">{rows.length} requests</div>
+      <div className="grid gap-3 md:grid-cols-2">
+        {rows.map((w) => (
+          <div key={w.id} className="glass rounded-2xl p-4">
+            <div className="flex justify-between">
+              <div>
+                <div className="font-display text-xl font-bold">₹{w.amount}</div>
+                <div className="text-xs font-mono text-primary">@{w.user_username}</div>
+              </div>
+              <span className={`text-xs uppercase font-semibold ${w.status === "withdrawn" ? "text-primary" : "text-amber-400"}`}>{w.status}</span>
+            </div>
+            <div className="mt-2 text-xs text-muted-foreground">Method: <b className="text-foreground">{w.method.toUpperCase()}</b></div>
+            {w.method === "upi" && <div className="text-xs text-muted-foreground">UPI ID: {w.details?.upi_id}</div>}
+            {w.method === "bank" && <div className="text-xs text-muted-foreground">A/C: {w.details?.account_number} · IFSC: {w.details?.ifsc}</div>}
+            {w.method === "coupon" && <div className="text-xs text-muted-foreground">Coupon 2x · WhatsApp: {w.details?.whatsapp} (Value: ₹{w.details?.coupon_value})</div>}
+            <div className="mt-1 text-[11px] text-muted-foreground">{new Date(w.created_at).toLocaleString()}</div>
+            {w.status === "waiting" && (
+              <button className="btn-premium mt-3 text-xs" onClick={() => done(w)}>Mark as done (Withdrawn)</button>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 type Pkg = { name?: string; amount?: number; views?: number; duration?: string; short?: string; long_url?: string; commission_sale_eligible?: boolean };
-const emptyPkg = (): Pkg => ({ name: "", amount: 0, views: 0, duration: "", short: "", long_url: "" });
+
+function emptyPkg(): Pkg {
+  return { name: "", amount: 0, views: 0, duration: "", short: "", long_url: "", commission_sale_eligible: false };
+}
 
 function SettingsTab() {
   const [s, setS] = useState<Record<string, any>>({});
-  const [pkgs, setPkgs] = useState<Pkg[]>([emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg(), emptyPkg()]);
-  const [loaded, setLoaded] = useState(false);
-  useEffect(() => {
-    supabase.from("settings").select("key,value").then(({ data }) => {
-      const o: Record<string, any> = {};
-      data?.forEach((r) => { o[r.key] = r.value; });
-      const list: Pkg[] = Array.isArray(o.business_packages) ? o.business_packages.slice(0, 6) : o.business_package?.name ? [o.business_package] : [];
-      while (list.length < 6) list.push(emptyPkg());
-      setPkgs(list);
-      setS(o); setLoaded(true);
-    });
-  }, []);
+  const [pkgs, setPkgs] = useState<Pkg[]>(Array.from({ length: 6 }, () => emptyPkg()));
 
-  async function save(key: string, value: any) {
-    const { error } = await supabase.from("settings").upsert({ key, value, updated_at: new Date().toISOString() });
-    if (error) toast.error(error.message); else toast.success("Saved");
+  const load = async () => {
+    const { data } = await supabase.from("settings").select("*");
+    const m: Record<string, any> = {};
+    (data ?? []).forEach((r) => { m[r.key] = r.value; });
+    setS(m);
+
+    let parsed: Pkg[] = [];
+    if (m.business_packages) {
+      try {
+        const raw = typeof m.business_packages === "string" ? JSON.parse(m.business_packages) : m.business_packages;
+        if (Array.isArray(raw)) parsed = raw;
+      } catch {
+        parsed = [];
+      }
+    } else if (m.business_package) {
+      try {
+        const single = typeof m.business_package === "string" ? JSON.parse(m.business_package) : m.business_package;
+        if (single && typeof single === "object") parsed = [single];
+      } catch {
+        parsed = [];
+      }
+    }
+
+    const filled: Pkg[] = Array.from({ length: 6 }, (_, i) => ({ ...emptyPkg(), ...(parsed[i] ?? {}) }));
+    setPkgs(filled);
+  };
+  useEffect(() => { load(); }, []);
+
+  const upd = (k: string, v: any) => setS((prev) => ({ ...prev, [k]: v }));
+
+  async function save(k: string, v: any) {
+    const { error } = await supabase.from("settings").upsert({ key: k, value: v }, { onConflict: "key" });
+    if (error) toast.error(error.message);
+    else { toast.success("Saved"); load(); }
   }
-  function upd(k: string, v: any) { setS({ ...s, [k]: v }); }
-
-  if (!loaded) return <div className="p-10 text-center text-muted-foreground">Loading…</div>;
-  const carousel: string[] = Array.isArray(s.carousel_images) ? s.carousel_images : [];
 
   return (
     <div className="space-y-6">
-      <Section title="Payments & referral">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="UPI ID"><input className={inputCls} value={s.upi_id ?? ""} onChange={(e) => upd("upi_id", e.target.value)} onBlur={() => save("upi_id", s.upi_id)} /></Field>
-          <Field label="Referral % (first task)"><input type="number" className={inputCls} value={s.referral_percent ?? 10} onChange={(e) => upd("referral_percent", Number(e.target.value))} onBlur={() => save("referral_percent", Number(s.referral_percent))} /></Field>
-          <Field label="Free tasks per user per 24 hours"><input type="number" className={inputCls} value={s.free_tasks_per_24h ?? 2} onChange={(e) => upd("free_tasks_per_24h", Number(e.target.value))} onBlur={() => save("free_tasks_per_24h", Number(s.free_tasks_per_24h))} /></Field>
+      <Section title="Payment details">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <Field label="Single UPI ID (used for QR code generation)"><input className={inputCls} value={s.upi_id ?? ""} onChange={(e) => upd("upi_id", e.target.value)} /></Field>
+          <button className="btn-premium" onClick={() => save("upi_id", s.upi_id)}>Save UPI</button>
         </div>
       </Section>
 
-      <Section title="Document links (Google Docs)">
-        <div className="grid gap-3">
-          {(["terms_url", "about_url", "rejection_terms_url"] as const).map((k) => (
-            <Field key={k} label={k}><input className={inputCls} value={s[k] ?? ""} onChange={(e) => upd(k, e.target.value)} onBlur={() => save(k, s[k])} /></Field>
-          ))}
-        </div>
-      </Section>
-
-      <Section title="Homepage carousel (2 images, changes every 6s)">
-        {[0, 1].map((i) => (
-          <Field key={i} label={`Image ${i + 1} Drive URL`}>
+      <Section title="Homepage image carousel (Google Drive links, max 2)">
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <Field label="Slide 1 Drive URL"><input className={inputCls} value={s.carousel_image_1 ?? ""} onChange={(e) => upd("carousel_image_1", e.target.value)} /></Field>
             <div className="flex gap-2">
-              <input className={inputCls} value={carousel[i] ?? ""} onChange={(e) => {
-                const c = [...carousel]; c[i] = e.target.value; upd("carousel_images", c);
-              }} onBlur={() => save("carousel_images", carousel)} />
-              <button
-                className="btn-soft shrink-0"
-                onClick={() => {
-                  const c = [...carousel]; c[i] = "";
-                  upd("carousel_images", c);
-                  save("carousel_images", c);
-                }}
-              >
-                Remove
-              </button>
+              <button className="btn-premium" onClick={() => save("carousel_image_1", s.carousel_image_1)}>Save</button>
+              {s.carousel_image_1 && (
+                <button className="rounded-full border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary" onClick={() => { upd("carousel_image_1", ""); save("carousel_image_1", ""); }}>Remove</button>
+              )}
             </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+            <Field label="Slide 2 Drive URL"><input className={inputCls} value={s.carousel_image_2 ?? ""} onChange={(e) => upd("carousel_image_2", e.target.value)} /></Field>
+            <div className="flex gap-2">
+              <button className="btn-premium" onClick={() => save("carousel_image_2", s.carousel_image_2)}>Save</button>
+              {s.carousel_image_2 && (
+                <button className="rounded-full border border-border px-3 py-2 text-xs text-muted-foreground hover:bg-secondary" onClick={() => { upd("carousel_image_2", ""); save("carousel_image_2", ""); }}>Remove</button>
+              )}
+            </div>
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Terms & About links (Google Docs)">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="T&Cs Google Docs URL"><input className={inputCls} value={s.terms_url ?? ""} onChange={(e) => upd("terms_url", e.target.value)} /></Field>
+          <Field label="About platform Google Docs URL"><input className={inputCls} value={s.about_url ?? ""} onChange={(e) => upd("about_url", e.target.value)} /></Field>
+          <Field label="Campaign rejection terms Google Docs URL"><input className={inputCls} value={s.rejection_terms_url ?? ""} onChange={(e) => upd("rejection_terms_url", e.target.value)} /></Field>
+        </div>
+        <button className="btn-premium mt-4" onClick={() => { save("terms_url", s.terms_url); save("about_url", s.about_url); save("rejection_terms_url", s.rejection_terms_url); }}>Save URLs</button>
+      </Section>
+
+      <Section title="Referral program">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <Field label="First task referral reward (%)"><input type="number" className={inputCls} value={s.referral_percent ?? 10} onChange={(e) => upd("referral_percent", Number(e.target.value))} /></Field>
+          <button className="btn-premium" onClick={() => save("referral_percent", Number(s.referral_percent))}>Save referral %</button>
+        </div>
+      </Section>
+
+      <Section title="Limits">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <Field label="Max free tasks per earner in rolling 24 hours">
+            <input type="number" min={1} className={inputCls} value={s.free_tasks_per_24h ?? 2} onChange={(e) => upd("free_tasks_per_24h", Math.max(1, Number(e.target.value) || 1))} />
           </Field>
-        ))}
+          <button className="btn-premium" onClick={() => save("free_tasks_per_24h", Math.max(1, Number(s.free_tasks_per_24h) || 1))}>Save limit</button>
+        </div>
       </Section>
 
       <Section title="Business packages (up to 6)">
