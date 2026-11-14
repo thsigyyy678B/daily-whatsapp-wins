@@ -481,12 +481,11 @@ function TasksTab() {
           </label>
           {f.commission_sale && (
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <Field label="Commission percentage (%)">
+              <Field label="Commission amount on sale (₹)">
                 <input
                   type="number"
                   min={1}
-                  max={100}
-                  placeholder="e.g. 15"
+                  placeholder="e.g. 150"
                   className={inputCls}
                   value={f.commission_percent}
                   onChange={(e) => setF({ ...f, commission_percent: e.target.value })}
