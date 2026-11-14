@@ -1,4 +1,3 @@
-
 import { createPortal } from "react-dom";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
@@ -31,6 +30,9 @@ type Task = {
   payout: number;
   unlock_amount: number;
   max_takers: number;
+  commission_sale?: boolean;
+  commission_phone?: string | null;
+  commission_percent?: number | null;
 };
 
 type Assign = {
@@ -471,12 +473,49 @@ function TaskCard({
           </div>
         )}
 
+        {/* BEFORE TAKING TASK: show label only */}
+        {!assign && task.commission_sale && (
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
+            <span>includes + additional commision when saled</span>
+          </div>
+        )}
+
         {assign ? (
           <div className="mt-4 space-y-2">
 
             <div className="text-xs">
               Status: <span className="text-primary">{assign.status}</span>
             </div>
+
+            {/* ONLY WHEN TASK IS TAKEN: show commission instructions & contact */}
+            {task.commission_sale && (
+              <div className="rounded-2xl border border-primary/30 bg-primary/10 p-3 text-xs text-primary-foreground/90">
+                <div className="font-semibold text-primary">
+                  Commission Sale Active
+                </div>
+                <p className="mt-1 text-muted-foreground">
+                  Do the sale of the product and earn{" "}
+                  <span className="font-bold text-primary">{task.commission_percent}%</span>{" "}
+                  of product's amount as commission.
+                </p>
+                {task.commission_phone && (
+                  <div className="mt-2 flex flex-col gap-1 border-t border-primary/20 pt-2 text-[11px]">
+                    <span className="text-muted-foreground">
+                      When sale is done, contact:{" "}
+                      <span className="font-bold text-foreground">{task.commission_phone}</span>
+                    </span>
+                    <a
+                      href={`https://wa.me/${task.commission_phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi, I took the task "${task.name}" and made a product sale.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-flex items-center justify-center rounded-lg bg-primary/20 px-3 py-1 font-medium text-primary hover:bg-primary/30"
+                    >
+                      Message business on WhatsApp →
+                    </a>
+                  </div>
+                )}
+              </div>
+            )}
 
             {assign.status === "assigned" && (
               <SubmitProof assign={assign} onDone={onDone} />
