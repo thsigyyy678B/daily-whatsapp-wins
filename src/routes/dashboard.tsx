@@ -560,7 +560,7 @@ function TaskCard({
       user_username: s?.username,
       task_id: task.id,
       whatsapp_number: phone.trim(),
-      sponsor_tx_id: task.type === "paid" ? txId.trim() : null,
+      unlock_transaction_id: task.type === "paid" ? txId.trim() : null,
       status: "assigned",
     });
 
@@ -793,8 +793,8 @@ function SubmitProof({
     const { error } = await supabase
       .from("task_assignments")
       .update({
-        proof_url: proofUrl.trim(),
-        views_reported: Number(views) || 0,
+        proof_image_url: proofUrl.trim(),
+        views: Number(views) || 0,
         status: "submitted",
         submitted_at: new Date().toISOString(),
       })
