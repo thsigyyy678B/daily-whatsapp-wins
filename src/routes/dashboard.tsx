@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { getSession } from "@/lib/session";
 import { toast } from "sonner";
 import { Field, inputCls } from "./login";
-import { Download, Eye, Lock, Wallet, MessageCircle } from "lucide-react";
+import { Download, Eye, Wallet, MessageCircle } from "lucide-react";
 import { DriveMedia } from "@/components/drive-media";
 import { driveToDownload } from "@/lib/supabase";
 import { isCommissionSalePackage } from "@/lib/commission-sale";
@@ -70,8 +70,7 @@ function Dashboard() {
   const [upi, setUpi] = useState("");
   const [takers, setTakers] = useState<Record<string, number>>({});
 
-  const [commissionListings, setCommissionListings] =
-    useState<CommissionListing[]>([]);
+  const [commissionListings, setCommissionListings] = useState<CommissionListing[]>([]);
 
   const load = useCallback(async () => {
     const s = getSession();
@@ -94,68 +93,77 @@ function Dashboard() {
       .select("*")
       .order("created_at", { ascending: false });
 
-    setTasks(t || []);
+    setTasks((t ?? []) as Task[]);
 
+    // Use task_assignments table
     const { data: a } = await supabase
-      .from("assignments")
+      .from("task_assignments")
       .select("*, task:tasks(*)")
       .eq("user_username", s.username)
       .order("assigned_at", { ascending: false });
 
-    setMine(a || []);
+    setMine((a ?? []) as Assign[]);
 
+    // Active takers count
     const { data: counts } = await supabase
-      .from("assignments")
-      .select("task_id")
-      .in("status", ["assigned", "submitted", "approved"]);
+      .from("task_assignments")
+      .select("task_id,status")
+      .in("status", ["assigned", "submitted"]);
 
     const map: Record<string, number> = {};
-
     (counts || []).forEach((row: any) => {
       map[row.task_id] = (map[row.task_id] || 0) + 1;
     });
-
     setTakers(map);
 
+    // Read key-value settings for UPI and 24h free task limit
     const { data: settings } = await supabase
       .from("settings")
-      .select("*")
-      .limit(1)
-      .maybeSingle();
+      .select("key,value")
+      .in("key", ["free_tasks_per_24h", "max_free_tasks", "upi_id"]);
 
-    if (settings) {
-      setMaxFree(Number(settings.max_free_tasks) || 2);
-      setUpi(settings.upi_id || "");
-    }
+    settings?.forEach((r) => {
+      if (r.key === "free_tasks_per_24h" || r.key === "max_free_tasks") {
+        setMaxFree(Number(r.value) || 2);
+      }
+      if (r.key === "upi_id") {
+        setUpi(String(r.value ?? ""));
+      }
+    });
 
+    // Business campaign commission listings
     const { data: campaigns } = await supabase
       .from("campaigns")
-      .select(`
-        id,
-        business_username,
-        image_url,
-        package_name,
-        product_name,
-        product_description,
-        seller_commission,
-        commission_sale_enabled,
-        status,
-        business:business_users (
-          name,
-          phone
-        )
-      `)
+      .select("*")
       .eq("status", "approved")
       .order("created_at", { ascending: false });
 
     const eligible = (campaigns || []).filter((c: any) => {
       return (
         c.commission_sale_enabled === true ||
-        isCommissionSalePackage(c.package_name)
+        isCommissionSalePackage(c.package_name ?? "")
       );
     });
 
-    setCommissionListings(eligible as CommissionListing[]);
+    const sellerUsernames = [
+      ...new Set(eligible.map((c: any) => c.business_username).filter(Boolean)),
+    ];
+
+    const { data: sellers } = sellerUsernames.length
+      ? await supabase
+          .from("businesses")
+          .select("username,name,phone")
+          .in("username", sellerUsernames)
+      : { data: [] as any[] };
+
+    const sellerMap = new Map((sellers ?? []).map((b: any) => [b.username, b]));
+
+    const marketplace = eligible.map((c: any) => ({
+      ...c,
+      business: sellerMap.get(c.business_username),
+    }));
+
+    setCommissionListings(marketplace as CommissionListing[]);
   }, [nav]);
 
   useEffect(() => {
@@ -165,10 +173,14 @@ function Dashboard() {
   const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const freeTakenLast24h = mine.filter(
-    (a) => a.task?.type === "free" && a.assigned_at >= since24h
+    (a) => a.task?.type === "free" && a.assigned_at >= since24h && a.status !== "rejected"
   ).length;
 
   const freeLimitReached = freeTakenLast24h >= maxFree;
+
+  // Split tasks into Commission Sale category vs Standard Available Tasks
+  const commissionTasks = tasks.filter((t) => Boolean(t.commission_sale));
+  const regularTasks = tasks.filter((t) => !t.commission_sale);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -247,8 +259,40 @@ function Dashboard() {
                     </div>
                   </div>
 
+                  {/* Commission sale details when taken */}
+                  {a.task?.commission_sale && (
+                    <div className="mt-3 rounded-2xl border border-primary/30 bg-primary/10 p-3 text-xs">
+                      <div className="font-semibold text-primary">
+                        Commission Sale Active
+                      </div>
+                      <p className="mt-1 text-muted-foreground">
+                        When product is sold, get{" "}
+                        <span className="font-bold text-primary">₹{a.task?.commission_percent}</span>.
+                      </p>
+                      {a.task?.commission_phone && (
+                        <div className="mt-2 flex flex-col gap-1 border-t border-primary/20 pt-2 text-[11px]">
+                          <span className="text-muted-foreground">
+                            When sale is done, contact:{" "}
+                            <span className="font-bold text-foreground">{a.task.commission_phone}</span>
+                          </span>
+                          <a
+                            href={`https://wa.me/${a.task.commission_phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi, I took the task "${a.task?.name}" and made a product sale.`)}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-1 inline-flex items-center justify-center rounded-lg bg-primary/20 px-3 py-1 font-medium text-primary hover:bg-primary/30"
+                          >
+                            <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
+                            Message business on WhatsApp →
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {a.status === "assigned" && (
-                    <SubmitProof assign={a} onDone={load} />
+                    <div className="mt-3">
+                      <SubmitProof assign={a} onDone={load} />
+                    </div>
                   )}
 
                   <a
@@ -266,7 +310,7 @@ function Dashboard() {
           </section>
         )}
 
-        {/* COMMISSION SALE SECTION */}
+        {/* COMMISSION SALE CATEGORY */}
         <section className="mb-10">
           <SectionTitle
             title="Commission Sale"
@@ -274,19 +318,33 @@ function Dashboard() {
           />
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* Commission Sale Tasks */}
+            {commissionTasks.map((t) => (
+              <TaskCard
+                key={t.id}
+                task={t}
+                myAssigns={mine}
+                freeLimitReached={freeLimitReached}
+                upi={upi}
+                takenCount={takers[t.id] || 0}
+                onDone={load}
+              />
+            ))}
+
+            {/* Business Campaign Commission Listings */}
             {commissionListings.map((listing) => (
               <CommissionSaleCard key={listing.id} listing={listing} />
             ))}
           </div>
 
-          {commissionListings.length === 0 && (
+          {commissionTasks.length === 0 && commissionListings.length === 0 && (
             <div className="glass rounded-2xl p-6 text-center text-xs text-muted-foreground">
               No commission products available right now. Check back soon.
             </div>
           )}
         </section>
 
-        {/* AVAILABLE TASKS */}
+        {/* AVAILABLE STANDARD TASKS */}
         <section>
           <SectionTitle
             title="Available Tasks"
@@ -294,7 +352,7 @@ function Dashboard() {
           />
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {tasks.map((t) => (
+            {regularTasks.map((t) => (
               <TaskCard
                 key={t.id}
                 task={t}
@@ -307,9 +365,9 @@ function Dashboard() {
             ))}
           </div>
 
-          {tasks.length === 0 && (
+          {regularTasks.length === 0 && (
             <div className="glass rounded-3xl p-12 text-center text-muted-foreground">
-              No tasks available right now. Check back soon.
+              No regular tasks available right now. Check back soon.
             </div>
           )}
         </section>
@@ -497,7 +555,8 @@ function TaskCard({
 
     const s = getSession();
 
-    const { error } = await supabase.from("assignments").insert({
+    // Insert into task_assignments table
+    const { error } = await supabase.from("task_assignments").insert({
       user_username: s?.username,
       task_id: task.id,
       whatsapp_number: phone.trim(),
@@ -569,10 +628,10 @@ function TaskCard({
           </div>
         )}
 
-        {/* BEFORE TAKING TASK: show label only */}
+        {/* BEFORE TAKING TASK: show commission badge */}
         {!assign && task.commission_sale && (
           <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold text-primary">
-            <span>includes + additional commision when saled</span>
+            <span>Includes + ₹{task.commission_percent} commission when sold</span>
           </div>
         )}
 
@@ -605,6 +664,7 @@ function TaskCard({
                       rel="noreferrer"
                       className="mt-1 inline-flex items-center justify-center rounded-lg bg-primary/20 px-3 py-1 font-medium text-primary hover:bg-primary/30"
                     >
+                      <MessageCircle className="mr-1.5 h-3.5 w-3.5" />
                       Message business on WhatsApp →
                     </a>
                   </div>
@@ -674,7 +734,7 @@ function TaskCard({
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-xs text-amber-400">
                     Admin has not configured UPI yet.
                   </div>
                 )}
@@ -729,8 +789,9 @@ function SubmitProof({
 
     setLoading(true);
 
+    // Update task_assignments table
     const { error } = await supabase
-      .from("assignments")
+      .from("task_assignments")
       .update({
         proof_url: proofUrl.trim(),
         views_reported: Number(views) || 0,
@@ -839,4 +900,5 @@ function Modal({
     document.body
   );
 }
+
 
