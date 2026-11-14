@@ -103,12 +103,12 @@ function Admin() {
     setBusinessCount(b);
 
     const [feeRes, usersWithTasksRes] = await Promise.all([
-      supabase.from("earner_signup_fees").select("total_fees").eq("id", 1).maybeSingle(),
+      supabase.from("earner_signup_fee_totals").select("total_amount").eq("id", true).maybeSingle(),
       supabase.from("app_users").select("tasks_completed"),
     ]);
 
-    if (!feeRes.error && feeRes.data?.total_fees !== undefined) {
-      setEarnerSignupFees(Number(feeRes.data.total_fees) || 0);
+    if (!feeRes.error && feeRes.data?.total_amount !== undefined) {
+      setEarnerSignupFees(Number(feeRes.data.total_amount) || 0);
     } else {
       setEarnerSignupFees(null);
     }
