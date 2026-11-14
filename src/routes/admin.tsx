@@ -104,7 +104,7 @@ function Admin() {
 
     const [feeRes, usersWithTasksRes] = await Promise.all([
       supabase.from("earner_signup_fee_totals").select("total_amount").eq("id", true).maybeSingle(),
-      supabase.from("app_users").select("tasks_completed"),
+      supabase.from("app_users").select("tasks_done"),
     ]);
 
     if (!feeRes.error && feeRes.data?.total_amount !== undefined) {
@@ -114,7 +114,7 @@ function Admin() {
     }
 
     if (!usersWithTasksRes.error && usersWithTasksRes.data) {
-      const due = calculateEarnerMonthlyDue(usersWithTasksRes.data.map((row) => ({ tasks_completed: row.tasks_completed })));
+      const due = calculateEarnerMonthlyDue(usersWithTasksRes.data.map((row) => Number(row.tasks_done) || 0));
       setEarnerMonthlyDue(due);
     } else {
       setEarnerMonthlyDue(null);
@@ -258,13 +258,13 @@ function UsersTab({ onUsersChanged }: { onUsersChanged?: () => void }) {
           </thead>
           <tbody className="divide-y divide-border">
             {rows.map((u) => (
-              <tr key={u.id} className="hover:bg-secondary/20">
+              <tr key={u.username} className="hover:bg-secondary/20">
                 <td className="p-3 font-mono font-bold text-primary">@{u.username}</td>
                 <td className="p-3">{u.name}</td>
                 <td className="p-3">{u.phone}</td>
                 <td className="p-3 text-xs text-muted-foreground">{new Date(u.created_at).toLocaleString()}</td>
-                <td className="p-3 font-semibold">₹{u.wallet_balance}</td>
-                <td className="p-3">{u.tasks_completed}</td>
+                <td className="p-3 font-semibold">₹{u.wallet}</td>
+                <td className="p-3">{u.tasks_done}</td>
                 <td className="p-3 flex items-center gap-2">
                   <AddMoneyModal user={u} onDone={load} />
                   <button
@@ -326,9 +326,9 @@ function AddMoneyModal({ user, onDone }: { user: any; onDone: () => void }) {
     const n = Number(amt);
     if (!n || n <= 0) { toast.error("Enter a valid amount"); return; }
     if (!reason.trim()) { toast.error("Reason is required"); return; }
-    const { error: err1 } = await supabase.from("app_users").update({ wallet_balance: Number(user.wallet_balance) + n }).eq("username", user.username);
+    const { error: err1 } = await supabase.from("app_users").update({ wallet: Number(user.wallet) + n }).eq("username", user.username);
     if (err1) { toast.error(err1.message); return; }
-    await supabase.from("wallet_history").insert({ user_username: user.username, amount: n, type: "bonus", reason: reason.slice(0, 50) });
+    await supabase.from("wallet_history").insert({ user_username: user.username, amount: n, type: "bonus", note: reason.slice(0, 50) });
     toast.success(`Added ₹${n}`);
     setOpen(false);
     onDone();
@@ -623,17 +623,17 @@ function SubmissionsTab() {
 
   async function approve(a: any) {
     const payout = a.task?.payout ?? 0;
-    const { data: u } = await supabase.from("app_users").select("wallet_balance,tasks_completed").eq("username", a.user_username).single();
+    const { data: u } = await supabase.from("app_users").select("wallet,tasks_done").eq("username", a.user_username).single();
     if (u) {
       await supabase.from("app_users").update({
-        wallet_balance: Number(u.wallet_balance) + payout,
-        tasks_completed: Number(u.tasks_completed) + 1,
+        wallet: Number(u.wallet) + payout,
+        tasks_done: Number(u.tasks_done) + 1,
       }).eq("username", a.user_username);
       await supabase.from("wallet_history").insert({
         user_username: a.user_username,
         amount: payout,
         type: "task_payout",
-        reason: `Completed: ${a.task?.name ?? "task"}`,
+        note: `Completed: ${a.task?.name ?? "task"}`,
       });
     }
     await supabase.from("task_assignments").update({ status: "approved" }).eq("id", a.id);
@@ -669,7 +669,7 @@ function SubmissionsTab() {
                 <div className="font-semibold">{a.task?.name}</div>
                 <div className="text-xs text-primary font-mono">@{a.user_username} · {a.whatsapp_number}</div>
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Views submitted: <b className="text-foreground">{a.proof_views}</b> (req: {a.task?.required_views}) · Payout: ₹{a.task?.payout}
+                  Views submitted: <b className="text-foreground">{a.views}</b> (req: {a.task?.required_views}) · Payout: ₹{a.task?.payout}
                 </div>
                 {a.assigned_at && (
                   <div className="mt-0.5 text-[11px] text-muted-foreground">
@@ -908,12 +908,12 @@ function WithdrawalsTab() {
   useEffect(() => { load(); }, []);
 
   async function done(w: any) {
-    await supabase.from("withdrawals").update({ status: "withdrawn", processed_at: new Date().toISOString() }).eq("id", w.id);
+    await supabase.from("withdrawals").update({ status: "done", completed_at: new Date().toISOString() }).eq("id", w.id);
     await supabase.from("wallet_history").insert({
       user_username: w.user_username,
       amount: -Number(w.amount),
       type: "withdrawal",
-      reason: `Payout completed via ${w.method}`,
+      note: `Payout completed via ${w.method}`,
     });
     toast.success("Marked as withdrawn");
     load();
@@ -930,14 +930,12 @@ function WithdrawalsTab() {
                 <div className="font-display text-xl font-bold">₹{w.amount}</div>
                 <div className="text-xs font-mono text-primary">@{w.user_username}</div>
               </div>
-              <span className={`text-xs uppercase font-semibold ${w.status === "withdrawn" ? "text-primary" : "text-amber-400"}`}>{w.status}</span>
+              <span className={`text-xs uppercase font-semibold ${w.status === "done" ? "text-primary" : "text-amber-400"}`}>{w.status}</span>
             </div>
             <div className="mt-2 text-xs text-muted-foreground">Method: <b className="text-foreground">{w.method.toUpperCase()}</b></div>
-            {w.method === "upi" && <div className="text-xs text-muted-foreground">UPI ID: {w.details?.upi_id}</div>}
-            {w.method === "bank" && <div className="text-xs text-muted-foreground">A/C: {w.details?.account_number} · IFSC: {w.details?.ifsc}</div>}
-            {w.method === "coupon" && <div className="text-xs text-muted-foreground">Coupon 2x · WhatsApp: {w.details?.whatsapp} (Value: ₹{w.details?.coupon_value})</div>}
+            <div className="text-xs text-muted-foreground">Details: <b className="text-foreground">{typeof w.details === "string" ? w.details : JSON.stringify(w.details)}</b></div>
             <div className="mt-1 text-[11px] text-muted-foreground">{new Date(w.created_at).toLocaleString()}</div>
-            {w.status === "waiting" && (
+            {w.status === "pending" && (
               <button className="btn-premium mt-3 text-xs" onClick={() => done(w)}>Mark as done (Withdrawn)</button>
             )}
           </div>
@@ -1109,4 +1107,3 @@ function ModalAdmin({ children, onClose }: { children: React.ReactNode; onClose:
     document.body,
   );
 }
-
